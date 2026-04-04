@@ -63,6 +63,10 @@ func (c *apiConfig) insertjob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if pld.IdempotencyKey == "" {
+		pld.IdempotencyKey = uuid.New().String()
+	}
+
 	ctx := context.Background()
 	params := db.InsertJobParams{
 		ID:             uuid.New(),

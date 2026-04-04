@@ -9,4 +9,4 @@ scheduled_at timestamp,
 created_at timestamp not null default now(),
 updated_at timestamp not null default now());
 -- +goose down 
-Drop table jobs
+Drop table jobs;
