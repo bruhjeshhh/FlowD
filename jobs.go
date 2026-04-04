@@ -7,22 +7,49 @@ import (
 )
 
 type incoming struct {
-	Payload struct {
-		Type string `json:"type"`
-		Data struct {
-			To      string `json:"to"`
-			Subject string `json:"subject"`
-			Body    string `json:"body"`
-		} `json:"data"`
-	} `json:"payload"`
-	ScheduledAt    time.Time `json:"scheduled_at"`
-	IdempotencyKey string    `json:"idempotency_key"`
+	Payload        json.RawMessage `json:"payload"`
+	ScheduledAt    time.Time       `json:"scheduled_at"`
+	IdempotencyKey string          `json:"idempotency_key"`
+}
+
+type payloadData struct {
+	Type string `json:"type"`
+	Data struct {
+		To      string `json:"to"`
+		Subject string `json:"subject"`
+		Body    string `json:"body"`
+	} `json:"data"`
 }
 
 func validatePayload(pls incoming) bool {
-	if pls.Payload.Type == "" {
+	if len(pls.Payload) == 0 || string(pls.Payload) == "null" {
 		return false
 	}
+
+	if pls.Payload[0] != '{' {
+		return false
+	}
+
+	var pld payloadData
+	if err := json.Unmarshal(pls.Payload, &pld); err != nil {
+		return false
+	}
+
+	if pld.Type == "" {
+		return false
+	}
+
+	if pld.Data.To == "" && pld.Data.Subject == "" && pld.Data.Body == "" {
+		return false
+	}
+
+	if !pls.ScheduledAt.IsZero() {
+		_, err := pls.ScheduledAt.MarshalText()
+		if err != nil {
+			return false
+		}
+	}
+
 	return true
 }
 
@@ -32,6 +59,7 @@ func (c *apiConfig) insertjob(w http.ResponseWriter, r *http.Request) {
 	decodingerror := decode.Decode(&pld)
 	if decodingerror != nil {
 		respondWithError(w, 400, "not a Json(probably)")
+		return
 	}
 	validity := validatePayload(pld)
 
