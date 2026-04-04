@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"math/rand/v2"
 	"time"
 
 	db "github.com/bruhjeshhh/flowd/internal/database"
@@ -26,12 +27,22 @@ func (c *APIConfig) WorkerFunc() {
 			time.Sleep(5 * time.Second)
 			continue
 		}
-
-		log.Printf("Processing job with ID: %s", id)
-		if err := c.DB.UpdateJobStatus(context.Background(), id); err != nil {
-			log.Printf("worker error updating job status: %v", err)
+		log.Printf("processing job with id: %v", id)
+		if rand.IntN(2) == 0 {
+			count, err := c.DB.IncrementRetryCount(context.Background(), id)
+			if err != nil {
+				log.Printf("worker error incrementing retry count for job with id: %v, error: %v", id, err)
+			}
+			if count >= 3 {
+				log.Printf("job with id: %v has reached maximum retry attempts, marking as failed", id)
+			} else {
+				log.Printf("processing failed for job with id: %v, retrying...", id)
+			}
+			c.DB.UpdateJobStatusNotSuccess(context.Background(), id)
+		} else {
+			log.Printf("job with id: %v has been successfully completed, marking as success", id)
+			c.DB.UpdateJobStatusSuccess(context.Background(), id)
 		}
-		time.Sleep(1 * time.Second)
+
 	}
 }
-

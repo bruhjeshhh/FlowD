@@ -33,6 +33,20 @@ func (q *Queries) GetJobByScheduledAt(ctx context.Context) (uuid.UUID, error) {
 	return id, err
 }
 
+const incrementRetryCount = `-- name: IncrementRetryCount :one
+UPDATE jobs
+SET retry_count = retry_count + 1, updated_at = NOW()
+WHERE id = $1
+returning retry_count
+`
+
+func (q *Queries) IncrementRetryCount(ctx context.Context, id uuid.UUID) (int32, error) {
+	row := q.db.QueryRowContext(ctx, incrementRetryCount, id)
+	var retry_count int32
+	err := row.Scan(&retry_count)
+	return retry_count, err
+}
+
 const insertJob = `-- name: InsertJob :one
 INSERT INTO jobs(id, payload, status, retry_count, max_retries, idempotency_key, scheduled_at,  created_at, updated_at)
 VALUES (
@@ -88,13 +102,29 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 	return i, err
 }
 
-const updateJobStatus = `-- name: UpdateJobStatus :exec
+const updateJobStatusNotSuccess = `-- name: UpdateJobStatusNotSuccess :exec
+UPDATE jobs
+SET 
+    status = CASE 
+        WHEN retry_count < max_retries THEN 'pending' 
+        ELSE 'failed' 
+    END,
+    updated_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) UpdateJobStatusNotSuccess(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, updateJobStatusNotSuccess, id)
+	return err
+}
+
+const updateJobStatusSuccess = `-- name: UpdateJobStatusSuccess :exec
 update jobs
 set status = 'success', updated_at = now()
 WHERE id = $1
 `
 
-func (q *Queries) UpdateJobStatus(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, updateJobStatus, id)
+func (q *Queries) UpdateJobStatusSuccess(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, updateJobStatusSuccess, id)
 	return err
 }

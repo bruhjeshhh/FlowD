@@ -24,7 +24,23 @@ WHERE id = (
 )
 returning id;
 
--- name: UpdateJobStatus :exec
+-- name: UpdateJobStatusSuccess :exec
 update jobs
 set status = 'success', updated_at = now()
 WHERE id = $1;
+
+-- name: UpdateJobStatusNotSuccess :exec
+UPDATE jobs
+SET 
+    status = CASE 
+        WHEN retry_count < max_retries THEN 'pending' 
+        ELSE 'failed' 
+    END,
+    updated_at = NOW()
+WHERE id = $1;
+
+-- name: IncrementRetryCount :one
+UPDATE jobs
+SET retry_count = retry_count + 1, updated_at = NOW()
+WHERE id = $1
+returning retry_count;
