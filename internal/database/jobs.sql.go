@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const insertjob = `-- name: insertjob :one
+const insertJob = `-- name: InsertJob :one
 INSERT INTO jobs(id, payload, status, retry_count, max_retries, idempotency_key, scheduled_at,  created_at, updated_at)
 VALUES (
     $1,
@@ -30,7 +30,7 @@ VALUES (
 RETURNING id, payload, status, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at
 `
 
-type insertjobParams struct {
+type InsertJobParams struct {
 	ID             uuid.UUID
 	Payload        json.RawMessage
 	Status         sql.NullString
@@ -42,8 +42,8 @@ type insertjobParams struct {
 	UpdatedAt      time.Time
 }
 
-func (q *Queries) insertjob(ctx context.Context, arg insertjobParams) (Job, error) {
-	row := q.db.QueryRowContext(ctx, insertjob,
+func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, error) {
+	row := q.db.QueryRowContext(ctx, insertJob,
 		arg.ID,
 		arg.Payload,
 		arg.Status,

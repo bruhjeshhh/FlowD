@@ -1,4 +1,4 @@
--- name: insertjob :one
+-- name: InsertJob :one
 INSERT INTO jobs(id, payload, status, retry_count, max_retries, idempotency_key, scheduled_at,  created_at, updated_at)
 VALUES (
     $1,

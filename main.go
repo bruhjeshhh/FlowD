@@ -40,7 +40,7 @@ func main() {
 		Handler: ptr,
 	}
 
-	// ptr.HandleFunc("POST /jobs", cfg.register)
+	ptr.HandleFunc("POST /jobs", cfg.insertjob)
 
 	log.Printf("we ballin")
 	log.Fatal(srv.ListenAndServe())
