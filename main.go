@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"os"
 
-	_ "github.com/lib/pq"
-
 	db "github.com/bruhjeshhh/flowd/internal/database"
+	"github.com/bruhjeshhh/flowd/worker"
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 type apiConfig struct {
@@ -39,7 +39,8 @@ func main() {
 		Addr:    ":8080",
 		Handler: ptr,
 	}
-
+	workerCfg := &worker.APIConfig{DB: dbQueries}
+	go workerCfg.WorkerFunc()
 	ptr.HandleFunc("POST /jobs", cfg.insertjob)
 
 	log.Printf("we ballin")

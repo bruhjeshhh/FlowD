@@ -14,6 +14,25 @@ import (
 	"github.com/google/uuid"
 )
 
+const getJobByScheduledAt = `-- name: GetJobByScheduledAt :one
+update jobs
+set status = 'processing', updated_at = now()
+WHERE id = (
+    SELECT id FROM jobs
+    WHERE status = 'pending'
+    ORDER BY scheduled_at
+    LIMIT 1
+)
+returning id
+`
+
+func (q *Queries) GetJobByScheduledAt(ctx context.Context) (uuid.UUID, error) {
+	row := q.db.QueryRowContext(ctx, getJobByScheduledAt)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertJob = `-- name: InsertJob :one
 INSERT INTO jobs(id, payload, status, retry_count, max_retries, idempotency_key, scheduled_at,  created_at, updated_at)
 VALUES (
@@ -67,4 +86,15 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const updateJobStatus = `-- name: UpdateJobStatus :exec
+update jobs
+set status = 'success', updated_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) UpdateJobStatus(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, updateJobStatus, id)
+	return err
 }
