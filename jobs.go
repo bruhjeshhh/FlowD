@@ -26,10 +26,6 @@ func validatePayload(pls incoming) bool {
 		return false
 	}
 
-	if pls.Payload[0] != '{' {
-		return false
-	}
-
 	var pld payloadData
 	if err := json.Unmarshal(pls.Payload, &pld); err != nil {
 		return false
@@ -38,18 +34,12 @@ func validatePayload(pls incoming) bool {
 	if pld.Type == "" {
 		return false
 	}
-
-	if pld.Data.To == "" && pld.Data.Subject == "" && pld.Data.Body == "" {
-		return false
-	}
-
 	if !pls.ScheduledAt.IsZero() {
 		_, err := pls.ScheduledAt.MarshalText()
 		if err != nil {
 			return false
 		}
 	}
-
 	return true
 }
 
