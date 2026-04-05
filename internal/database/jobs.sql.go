@@ -19,8 +19,8 @@ update jobs
 set status = 'processing', updated_at = now()
 WHERE id = (
     SELECT id FROM jobs
-    WHERE status = 'pending'
-    ORDER BY scheduled_at
+    WHERE status = 'pending' AND (next_run_at IS NULL OR next_run_at <= now())
+    ORDER BY next_run_at ASC
     For update SKIP LOCKED
     LIMIT 1
 )
@@ -49,7 +49,7 @@ func (q *Queries) IncrementRetryCount(ctx context.Context, id uuid.UUID) (int32,
 }
 
 const insertJob = `-- name: InsertJob :one
-INSERT INTO jobs(id, payload, status, retry_count, max_retries, idempotency_key, scheduled_at,  created_at, updated_at)
+INSERT INTO jobs(id, payload, status, retry_count, max_retries, idempotency_key, scheduled_at,  created_at, updated_at,next_run_at)
 VALUES (
     $1,
     $2,
@@ -59,9 +59,10 @@ VALUES (
     $6,
     $7,
     $8,
-    $9
+    $9,
+    $10
 )
-RETURNING id, payload, status, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at
+RETURNING id, payload, status, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at
 `
 
 type InsertJobParams struct {
@@ -74,6 +75,7 @@ type InsertJobParams struct {
 	ScheduledAt    sql.NullTime
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	NextRunAt      time.Time
 }
 
 func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, error) {
@@ -87,6 +89,7 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 		arg.ScheduledAt,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.NextRunAt,
 	)
 	var i Job
 	err := row.Scan(
@@ -99,6 +102,7 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 		&i.ScheduledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.NextRunAt,
 	)
 	return i, err
 }
@@ -109,6 +113,10 @@ SET
     status = CASE 
         WHEN retry_count < max_retries THEN 'pending' 
         ELSE 'failed' 
+    END,
+    next_run_at = CASE 
+        WHEN retry_count < max_retries THEN NOW() + INTERVAL '5 seconds' 
+        ELSE NULL 
     END,
     updated_at = NOW()
 WHERE id = $1
@@ -121,7 +129,7 @@ func (q *Queries) UpdateJobStatusNotSuccess(ctx context.Context, id uuid.UUID) e
 
 const updateJobStatusSuccess = `-- name: UpdateJobStatusSuccess :exec
 update jobs
-set status = 'success', updated_at = now()
+set status = 'success', updated_at = now(), next_run_at = NULL
 WHERE id = $1
 `
 

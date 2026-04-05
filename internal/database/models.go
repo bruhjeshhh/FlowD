@@ -22,4 +22,5 @@ type Job struct {
 	ScheduledAt    sql.NullTime
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	NextRunAt      time.Time
 }
