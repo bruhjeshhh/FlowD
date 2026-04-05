@@ -21,6 +21,7 @@ WHERE id = (
     SELECT id FROM jobs
     WHERE status = 'pending'
     ORDER BY scheduled_at
+    For update SKIP LOCKED
     LIMIT 1
 )
 returning id
