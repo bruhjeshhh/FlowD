@@ -78,7 +78,7 @@ func (c *apiConfig) insertjob(w http.ResponseWriter, r *http.Request) {
 		ScheduledAt:    sql.NullTime{Time: pld.ScheduledAt, Valid: !pld.ScheduledAt.IsZero()},
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
-		NextRunAt:      time.Now(),
+		NextRunAt:      sql.NullTime{Time: time.Now(), Valid: true},
 	}
 	_, err := c.db.InsertJob(ctx, params)
 	if err != nil {

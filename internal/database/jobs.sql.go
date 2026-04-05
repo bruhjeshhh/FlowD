@@ -19,7 +19,7 @@ update jobs
 set status = 'processing', updated_at = now()
 WHERE id = (
     SELECT id FROM jobs
-    WHERE status = 'pending' AND (next_run_at IS NULL OR next_run_at <= now())
+    WHERE status = 'pending' AND (next_run_at IS NULL OR next_run_at >= now())
     ORDER BY next_run_at ASC
     For update SKIP LOCKED
     LIMIT 1
@@ -29,6 +29,20 @@ returning id
 
 func (q *Queries) GetJobByScheduledAt(ctx context.Context) (uuid.UUID, error) {
 	row := q.db.QueryRowContext(ctx, getJobByScheduledAt)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getStuckJobs = `-- name: GetStuckJobs :one
+SELECT id FROM jobs
+WHERE status = 'processing' AND updated_at < NOW() - INTERVAL '1 minute'
+FOR UPDATE SKIP LOCKED
+limit 1
+`
+
+func (q *Queries) GetStuckJobs(ctx context.Context) (uuid.UUID, error) {
+	row := q.db.QueryRowContext(ctx, getStuckJobs)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -75,7 +89,7 @@ type InsertJobParams struct {
 	ScheduledAt    sql.NullTime
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
-	NextRunAt      time.Time
+	NextRunAt      sql.NullTime
 }
 
 func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, error) {
@@ -105,6 +119,17 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 		&i.NextRunAt,
 	)
 	return i, err
+}
+
+const resetStuckJob = `-- name: ResetStuckJob :exec
+UPDATE jobs
+SET status = 'pending', updated_at = NOW(), next_run_at = NOW() + INTERVAL '5 seconds'
+WHERE id = $1
+`
+
+func (q *Queries) ResetStuckJob(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, resetStuckJob, id)
+	return err
 }
 
 const updateJobStatusNotSuccess = `-- name: UpdateJobStatusNotSuccess :exec

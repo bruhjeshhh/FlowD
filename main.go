@@ -52,10 +52,11 @@ func main() {
 		workerCfg := &worker.APIConfig{DB: dbQueries, WorkerID: i}
 		go workerCfg.WorkerFunc()
 	}
-
+	rescuerCfg := &worker.APIConfig{DB: dbQueries, WorkerID: 0}
+	go rescuerCfg.RescuerFunc()
 	ptr.HandleFunc("POST /jobs", cfg.insertjob)
 
-	log.Printf("we ballin with %d workers", workerCount)
+	log.Printf("we ballin with %d workers and a rescuer", workerCount)
 	log.Fatal(srv.ListenAndServe())
 
 }

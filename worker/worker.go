@@ -39,11 +39,31 @@ func (c *APIConfig) WorkerFunc() {
 			} else {
 				log.Printf("worker[%d] processing failed for job with id: %v, retrying...", c.WorkerID, id)
 			}
-			c.DB.UpdateJobStatusNotSuccess(context.Background(), id)
+			if err := c.DB.UpdateJobStatusNotSuccess(context.Background(), id); err != nil {
+				log.Printf("worker[%d] error updating job status to not success for id: %v, error: %v", c.WorkerID, id, err)
+			}
 		} else {
 			log.Printf("worker[%d] job with id: %v has been successfully completed, marking as success", c.WorkerID, id)
-			c.DB.UpdateJobStatusSuccess(context.Background(), id)
+			if err := c.DB.UpdateJobStatusSuccess(context.Background(), id); err != nil {
+				log.Printf("worker[%d] error updating job status to success for id: %v, error: %v", c.WorkerID, id, err)
+			}
 		}
 
+	}
+}
+
+func (c *APIConfig) RescuerFunc() {
+	for {
+		id, err := c.DB.GetStuckJobs(context.Background())
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				time.Sleep(1 * time.Minute)
+				continue
+			}
+			log.Printf("rescuer error getting stuck job: %v", err)
+			if err := c.DB.ResetStuckJob(context.Background(), id); err != nil {
+				log.Printf("rescuer error resetting stuck job: %v", err)
+			}
+		}
 	}
 }
