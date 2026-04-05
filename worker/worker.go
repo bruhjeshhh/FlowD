@@ -12,7 +12,8 @@ import (
 )
 
 type APIConfig struct {
-	DB *db.Queries
+	DB       *db.Queries
+	WorkerID int
 }
 
 func (c *APIConfig) WorkerFunc() {
@@ -23,24 +24,24 @@ func (c *APIConfig) WorkerFunc() {
 				time.Sleep(2 * time.Second)
 				continue
 			}
-			log.Printf("worker error getting job: %v", err)
+			log.Printf("worker[%d] error getting job: %v", c.WorkerID, err)
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		log.Printf("processing job with id: %v", id)
+		log.Printf("worker[%d] processing job with id: %v", c.WorkerID, id)
 		if rand.IntN(2) == 0 {
 			count, err := c.DB.IncrementRetryCount(context.Background(), id)
 			if err != nil {
-				log.Printf("worker error incrementing retry count for job with id: %v, error: %v", id, err)
+				log.Printf("worker[%d] error incrementing retry count for job with id: %v, error: %v", c.WorkerID, id, err)
 			}
 			if count >= 3 {
-				log.Printf("job with id: %v has reached maximum retry attempts, marking as failed", id)
+				log.Printf("worker[%d] job with id: %v has reached maximum retry attempts, marking as failed", c.WorkerID, id)
 			} else {
-				log.Printf("processing failed for job with id: %v, retrying...", id)
+				log.Printf("worker[%d] processing failed for job with id: %v, retrying...", c.WorkerID, id)
 			}
 			c.DB.UpdateJobStatusNotSuccess(context.Background(), id)
 		} else {
-			log.Printf("job with id: %v has been successfully completed, marking as success", id)
+			log.Printf("worker[%d] job with id: %v has been successfully completed, marking as success", c.WorkerID, id)
 			c.DB.UpdateJobStatusSuccess(context.Background(), id)
 		}
 
