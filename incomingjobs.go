@@ -1,9 +1,9 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -41,26 +41,46 @@ func validatePayload(pls incoming) bool {
 	}
 
 	if !pls.ScheduledAt.IsZero() {
-		_, err := pls.ScheduledAt.MarshalText()
-		if err != nil {
+		if _, err := pls.ScheduledAt.MarshalText(); err != nil {
 			return false
 		}
 	}
 	return true
 }
 
+func parsePayloadType(payload json.RawMessage) (string, error) {
+	var pld payloadData
+	if err := json.Unmarshal(payload, &pld); err != nil {
+		return "", err
+	}
+	if pld.Type == "" {
+		return "", errors.New("missing type")
+	}
+	return pld.Type, nil
+}
+
+func nextRunAt(now time.Time, scheduledAt time.Time) time.Time {
+	if !scheduledAt.IsZero() && scheduledAt.After(now) {
+		return scheduledAt
+	}
+	return now
+}
+
 func (c *apiConfig) insertjob(w http.ResponseWriter, r *http.Request) {
 	decode := json.NewDecoder(r.Body)
 	pld := incoming{}
-	decodingerror := decode.Decode(&pld)
-	if decodingerror != nil {
-		respondWithError(w, 400, "not a Json(probably)")
+	if err := decode.Decode(&pld); err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	validity := validatePayload(pld)
+	if !validatePayload(pld) {
+		respondWithError(w, http.StatusBadRequest, "invalid format")
+		return
+	}
 
-	if validity == false {
-		respondWithError(w, 400, "invalid format")
+	jobType, err := parsePayloadType(pld.Payload)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid payload")
 		return
 	}
 
@@ -68,24 +88,78 @@ func (c *apiConfig) insertjob(w http.ResponseWriter, r *http.Request) {
 		pld.IdempotencyKey = uuid.New().String()
 	}
 
-	ctx := context.Background()
+	ctx := r.Context()
+	now := time.Now().UTC()
+
+	tx, err := c.dbConn.BeginTx(ctx, nil)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	qtx := c.db.WithTx(tx)
+
+	existing, err := qtx.GetJobByIdempotencyKey(ctx, pld.IdempotencyKey)
+	if err == nil {
+		if err := tx.Commit(); err != nil {
+			respondWithError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+		respondWithJson(w, http.StatusOK, createJobResponse{
+			Job:              jobToOut(existing),
+			IdempotentReplay: true,
+		})
+		return
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		respondWithError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+
 	params := db.InsertJobParams{
 		ID:             uuid.New(),
 		Payload:        pld.Payload,
 		Status:         sql.NullString{String: "pending", Valid: true},
+		Type:           jobType,
 		RetryCount:     0,
 		MaxRetries:     3,
 		IdempotencyKey: pld.IdempotencyKey,
 		ScheduledAt:    sql.NullTime{Time: pld.ScheduledAt, Valid: !pld.ScheduledAt.IsZero()},
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
-		NextRunAt:      sql.NullTime{Time: time.Now(), Valid: true},
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		NextRunAt:      sql.NullTime{Time: nextRunAt(now, pld.ScheduledAt), Valid: true},
 	}
-	_, err := c.db.InsertJob(ctx, params)
+
+	job, err := qtx.InsertJob(ctx, params)
 	if err != nil {
-		respondWithError(w, 500, "Failed to insert job")
+		if isUniqueViolation(err) {
+			existing, err2 := qtx.GetJobByIdempotencyKey(ctx, pld.IdempotencyKey)
+			if err2 != nil {
+				respondWithError(w, http.StatusInternalServerError, "database error")
+				return
+			}
+			if err := tx.Commit(); err != nil {
+				respondWithError(w, http.StatusInternalServerError, "database error")
+				return
+			}
+			respondWithJson(w, http.StatusOK, createJobResponse{
+				Job:              jobToOut(existing),
+				IdempotentReplay: true,
+			})
+			return
+		}
+		respondWithError(w, http.StatusInternalServerError, "failed to create job")
 		return
 	}
 
-	respondWithJson(w, 201, "Job created successfully")
+	if err := tx.Commit(); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+
+	respondWithJson(w, http.StatusCreated, createJobResponse{
+		Job:              jobToOut(job),
+		IdempotentReplay: false,
+	})
 }
