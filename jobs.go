@@ -39,6 +39,7 @@ func validatePayload(pls incoming) bool {
 	if pld.Type == "" {
 		return false
 	}
+
 	if !pls.ScheduledAt.IsZero() {
 		_, err := pls.ScheduledAt.MarshalText()
 		if err != nil {
