@@ -99,10 +99,4 @@ export DB_URL='postgres://postgres:postgres@localhost:5432/flowD_db?sslmode=disa
 go test -tags=integration ./... -count=1
 ```
 
-## After the sprint (low-effort GitHub rhythm)
 
-When you are focused on DSA or other priorities, short sessions (~10–30 minutes) are enough to keep the repo looking active: merge a Dependabot PR, bump a patch dependency, add one small test, fix a typo in the README, or tighten an error message. A short screen recording (e.g. enqueue → worker logs → `GET /jobs/{id}`) linked from the README is high ROI for recruiters. Avoid starting large new features in those slots.
-
-## License
-
-MIT (or your choice — add a `LICENSE` file if you need one).
