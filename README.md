@@ -55,6 +55,25 @@ go run .
 
 Optional: `WORKER_COUNT` (default `4`).
 
+## Environment
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DB_URL` | yes | PostgreSQL URL (e.g. `postgres://user:pass@host:5432/dbname?sslmode=disable`) |
+| `WORKER_COUNT` | no | Number of worker goroutines (default `4`) |
+
+## Architecture
+
+Clients enqueue and query jobs over HTTP. Workers and the rescuer loop independently and coordinate only through Postgres: workers claim the next eligible row with `FOR UPDATE SKIP LOCKED`; the rescuer moves stuck `processing` rows back to `pending`.
+
+```mermaid
+flowchart LR
+  client[Client] --> httpAPI[HTTP_API]
+  httpAPI --> postgres[(Postgres)]
+  workers[Workers] --> postgres
+  rescuer[Rescuer] --> postgres
+```
+
 ## Design notes
 
 | Topic | Choice |
@@ -82,7 +101,7 @@ go test -tags=integration ./... -count=1
 
 ## After the sprint (low-effort GitHub rhythm)
 
-When you are focused on DSA or other priorities, short sessions (~10–30 minutes) are enough to keep the repo looking active: merge a Dependabot PR, bump a patch dependency, add one small test, fix a typo in the README, or tighten an error message. Avoid starting large new features in those slots.
+When you are focused on DSA or other priorities, short sessions (~10–30 minutes) are enough to keep the repo looking active: merge a Dependabot PR, bump a patch dependency, add one small test, fix a typo in the README, or tighten an error message. A short screen recording (e.g. enqueue → worker logs → `GET /jobs/{id}`) linked from the README is high ROI for recruiters. Avoid starting large new features in those slots.
 
 ## License
 
