@@ -2,7 +2,7 @@
 create table jobs(id uuid primary key,
 payload json not null,
  status TEXT CHECK (status IN ('pending', 'processing','success','failed')),
- type TEXT CHECK (type IN ('email','sms','push_notification')),
+ type TEXT CHECK (type IN ('email','sms','push_notification')) not null,
 retry_count int not null default 0,
 max_retries int not null default 3,
 idempotency_key varchar not null unique,

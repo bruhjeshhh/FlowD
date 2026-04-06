@@ -24,7 +24,7 @@ WHERE id = (
     For update SKIP LOCKED
     LIMIT 1
 )
-returning id;
+returning *;
 
 -- name: UpdateJobStatusSuccess :exec
 update jobs

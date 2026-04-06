@@ -24,14 +24,26 @@ WHERE id = (
     For update SKIP LOCKED
     LIMIT 1
 )
-returning id
+returning id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at
 `
 
-func (q *Queries) GetJobByScheduledAt(ctx context.Context) (uuid.UUID, error) {
+func (q *Queries) GetJobByScheduledAt(ctx context.Context) (Job, error) {
 	row := q.db.QueryRowContext(ctx, getJobByScheduledAt)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.Payload,
+		&i.Status,
+		&i.Type,
+		&i.RetryCount,
+		&i.MaxRetries,
+		&i.IdempotencyKey,
+		&i.ScheduledAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.NextRunAt,
+	)
+	return i, err
 }
 
 const getStuckJobs = `-- name: GetStuckJobs :one
@@ -76,7 +88,7 @@ VALUES (
     $9,
     $10
 )
-RETURNING id, payload, status, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at
+RETURNING id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at
 `
 
 type InsertJobParams struct {
@@ -110,6 +122,7 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 		&i.ID,
 		&i.Payload,
 		&i.Status,
+		&i.Type,
 		&i.RetryCount,
 		&i.MaxRetries,
 		&i.IdempotencyKey,

@@ -16,6 +16,7 @@ type Job struct {
 	ID             uuid.UUID
 	Payload        json.RawMessage
 	Status         sql.NullString
+	Type           string
 	RetryCount     int32
 	MaxRetries     int32
 	IdempotencyKey string

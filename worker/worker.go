@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"log"
-	"math/rand/v2"
 	"time"
 
 	db "github.com/bruhjeshhh/flowd/internal/database"
@@ -18,7 +17,7 @@ type APIConfig struct {
 
 func (c *APIConfig) WorkerFunc() {
 	for {
-		id, err := c.DB.GetJobByScheduledAt(context.Background())
+		response, err := c.DB.GetJobByScheduledAt(context.Background())
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				time.Sleep(2 * time.Second)
@@ -28,28 +27,20 @@ func (c *APIConfig) WorkerFunc() {
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		log.Printf("worker[%d] processing job with id: %v", c.WorkerID, id)
-		if rand.IntN(2) == 0 {
-			count, err := c.DB.IncrementRetryCount(context.Background(), id)
-			if err != nil {
-				log.Printf("worker[%d] error incrementing retry count for job with id: %v, error: %v", c.WorkerID, id, err)
+
+		doneornot := handlejobs(response.Type, response.Payload)
+		if doneornot {
+			if err := c.DB.UpdateJobStatusSuccess(context.Background(), response.ID); err != nil {
+				log.Printf("worker[%d] error updating job status: %v", c.WorkerID, err)
 			}
-			if count >= 3 {
-				log.Printf("worker[%d] job with id: %v has reached maximum retry attempts, marking as failed", c.WorkerID, id)
-			} else {
-				log.Printf("worker[%d] processing failed for job with id: %v, retrying...", c.WorkerID, id)
-			}
-			if err := c.DB.UpdateJobStatusNotSuccess(context.Background(), id); err != nil {
-				log.Printf("worker[%d] error updating job status to not success for id: %v, error: %v", c.WorkerID, id, err)
-			}
+
 		} else {
-			log.Printf("worker[%d] job with id: %v has been successfully completed, marking as success", c.WorkerID, id)
-			if err := c.DB.UpdateJobStatusSuccess(context.Background(), id); err != nil {
-				log.Printf("worker[%d] error updating job status to success for id: %v, error: %v", c.WorkerID, id, err)
+			if err := c.DB.UpdateJobStatusNotSuccess(context.Background(), response.ID); err != nil {
+				log.Printf("worker[%d] error updating job status: %v", c.WorkerID, err)
 			}
 		}
-
 	}
+
 }
 
 func (c *APIConfig) RescuerFunc() {
