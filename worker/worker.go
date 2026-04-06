@@ -15,46 +15,75 @@ type APIConfig struct {
 	WorkerID int
 }
 
-func (c *APIConfig) WorkerFunc() {
+func (c *APIConfig) WorkerFunc(ctx context.Context) {
 	for {
-		response, err := c.DB.GetJobByScheduledAt(context.Background())
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		response, err := c.DB.GetJobByScheduledAt(ctx)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				time.Sleep(2 * time.Second)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(2 * time.Second):
+				}
 				continue
 			}
 			log.Printf("worker[%d] error getting job: %v", c.WorkerID, err)
-			time.Sleep(5 * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+			}
 			continue
 		}
 
-		doneornot := handlejobs(response.Type, response.Payload)
-		if doneornot {
-			if err := c.DB.UpdateJobStatusSuccess(context.Background(), response.ID); err != nil {
+		ok := handlejobs(response.Type, response.Payload)
+		if ok {
+			if err := c.DB.UpdateJobStatusSuccess(ctx, response.ID); err != nil {
 				log.Printf("worker[%d] error updating job status: %v", c.WorkerID, err)
 			}
-
 		} else {
-			if err := c.DB.UpdateJobStatusNotSuccess(context.Background(), response.ID); err != nil {
+			if err := c.DB.UpdateJobStatusNotSuccess(ctx, response.ID); err != nil {
 				log.Printf("worker[%d] error updating job status: %v", c.WorkerID, err)
 			}
 		}
 	}
-
 }
 
-func (c *APIConfig) RescuerFunc() {
+func (c *APIConfig) RescuerFunc(ctx context.Context) {
 	for {
-		id, err := c.DB.GetStuckJobs(context.Background())
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		id, err := c.DB.GetStuckJobs(ctx)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				time.Sleep(1 * time.Minute)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(1 * time.Minute):
+				}
 				continue
 			}
 			log.Printf("rescuer error getting stuck job: %v", err)
-			if err := c.DB.ResetStuckJob(context.Background(), id); err != nil {
-				log.Printf("rescuer error resetting stuck job: %v", err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(10 * time.Second):
 			}
+			continue
+		}
+
+		if err := c.DB.ResetStuckJob(ctx, id); err != nil {
+			log.Printf("rescuer error resetting stuck job: %v", err)
 		}
 	}
 }
