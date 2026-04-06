@@ -14,17 +14,69 @@ import (
 	"github.com/google/uuid"
 )
 
+const getJobByID = `-- name: GetJobByID :one
+SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at FROM jobs
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetJobByID(ctx context.Context, id uuid.UUID) (Job, error) {
+	row := q.db.QueryRowContext(ctx, getJobByID, id)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.Payload,
+		&i.Status,
+		&i.Type,
+		&i.RetryCount,
+		&i.MaxRetries,
+		&i.IdempotencyKey,
+		&i.ScheduledAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.NextRunAt,
+	)
+	return i, err
+}
+
+const getJobByIdempotencyKey = `-- name: GetJobByIdempotencyKey :one
+SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at FROM jobs
+WHERE idempotency_key = $1
+LIMIT 1
+`
+
+func (q *Queries) GetJobByIdempotencyKey(ctx context.Context, idempotencyKey string) (Job, error) {
+	row := q.db.QueryRowContext(ctx, getJobByIdempotencyKey, idempotencyKey)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.Payload,
+		&i.Status,
+		&i.Type,
+		&i.RetryCount,
+		&i.MaxRetries,
+		&i.IdempotencyKey,
+		&i.ScheduledAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.NextRunAt,
+	)
+	return i, err
+}
+
 const getJobByScheduledAt = `-- name: GetJobByScheduledAt :one
-update jobs
-set status = 'processing', updated_at = now()
+UPDATE jobs
+SET status = 'processing', updated_at = now()
 WHERE id = (
-    SELECT id FROM jobs
-    WHERE status = 'pending' AND (next_run_at IS NULL OR next_run_at >= now())
-    ORDER BY next_run_at ASC
-    For update SKIP LOCKED
+    SELECT j.id FROM jobs j
+    WHERE j.status = 'pending'
+      AND (j.scheduled_at IS NULL OR j.scheduled_at <= now())
+      AND (j.next_run_at IS NULL OR j.next_run_at <= now())
+    ORDER BY j.next_run_at ASC NULLS LAST, j.created_at ASC
+    FOR UPDATE SKIP LOCKED
     LIMIT 1
 )
-returning id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at
+RETURNING id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at
 `
 
 func (q *Queries) GetJobByScheduledAt(ctx context.Context) (Job, error) {
@@ -50,7 +102,7 @@ const getStuckJobs = `-- name: GetStuckJobs :one
 SELECT id FROM jobs
 WHERE status = 'processing' AND updated_at < NOW() - INTERVAL '1 minute'
 FOR UPDATE SKIP LOCKED
-limit 1
+LIMIT 1
 `
 
 func (q *Queries) GetStuckJobs(ctx context.Context) (uuid.UUID, error) {
@@ -64,7 +116,7 @@ const incrementRetryCount = `-- name: IncrementRetryCount :one
 UPDATE jobs
 SET retry_count = retry_count + 1, updated_at = NOW()
 WHERE id = $1
-returning retry_count
+RETURNING retry_count
 `
 
 func (q *Queries) IncrementRetryCount(ctx context.Context, id uuid.UUID) (int32, error) {
@@ -75,18 +127,12 @@ func (q *Queries) IncrementRetryCount(ctx context.Context, id uuid.UUID) (int32,
 }
 
 const insertJob = `-- name: InsertJob :one
-INSERT INTO jobs(id, payload, status, retry_count, max_retries, idempotency_key, scheduled_at,  created_at, updated_at,next_run_at)
+INSERT INTO jobs(
+    id, payload, status, type, retry_count, max_retries, idempotency_key,
+    scheduled_at, created_at, updated_at, next_run_at
+)
 VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6,
-    $7,
-    $8,
-    $9,
-    $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 RETURNING id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at
 `
@@ -95,6 +141,7 @@ type InsertJobParams struct {
 	ID             uuid.UUID
 	Payload        json.RawMessage
 	Status         sql.NullString
+	Type           string
 	RetryCount     int32
 	MaxRetries     int32
 	IdempotencyKey string
@@ -109,6 +156,7 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 		arg.ID,
 		arg.Payload,
 		arg.Status,
+		arg.Type,
 		arg.RetryCount,
 		arg.MaxRetries,
 		arg.IdempotencyKey,
@@ -147,14 +195,15 @@ func (q *Queries) ResetStuckJob(ctx context.Context, id uuid.UUID) error {
 
 const updateJobStatusNotSuccess = `-- name: UpdateJobStatusNotSuccess :exec
 UPDATE jobs
-SET 
-    status = CASE 
-        WHEN retry_count < max_retries THEN 'pending' 
-        ELSE 'failed' 
+SET
+    retry_count = jobs.retry_count + 1,
+    status = CASE
+        WHEN jobs.retry_count + 1 < jobs.max_retries THEN 'pending'
+        ELSE 'failed'
     END,
-    next_run_at = CASE 
-        WHEN retry_count < max_retries THEN NOW() + INTERVAL '5 seconds' 
-        ELSE NULL 
+    next_run_at = CASE
+        WHEN jobs.retry_count + 1 < jobs.max_retries THEN NOW() + INTERVAL '5 seconds'
+        ELSE NULL
     END,
     updated_at = NOW()
 WHERE id = $1
@@ -166,8 +215,8 @@ func (q *Queries) UpdateJobStatusNotSuccess(ctx context.Context, id uuid.UUID) e
 }
 
 const updateJobStatusSuccess = `-- name: UpdateJobStatusSuccess :exec
-update jobs
-set status = 'success', updated_at = now(), next_run_at = NULL
+UPDATE jobs
+SET status = 'success', updated_at = now(), next_run_at = NULL
 WHERE id = $1
 `
 

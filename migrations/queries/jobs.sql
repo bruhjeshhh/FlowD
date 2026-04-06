@@ -1,63 +1,70 @@
 -- name: InsertJob :one
-INSERT INTO jobs(id, payload, status, retry_count, max_retries, idempotency_key, scheduled_at,  created_at, updated_at,next_run_at)
+INSERT INTO jobs(
+    id, payload, status, type, retry_count, max_retries, idempotency_key,
+    scheduled_at, created_at, updated_at, next_run_at
+)
 VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6,
-    $7,
-    $8,
-    $9,
-    $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 RETURNING *;
 
+-- name: GetJobByIdempotencyKey :one
+SELECT * FROM jobs
+WHERE idempotency_key = $1
+LIMIT 1;
+
+-- name: GetJobByID :one
+SELECT * FROM jobs
+WHERE id = $1
+LIMIT 1;
+
 -- name: GetJobByScheduledAt :one
-update jobs
-set status = 'processing', updated_at = now()
+UPDATE jobs
+SET status = 'processing', updated_at = now()
 WHERE id = (
-    SELECT id FROM jobs
-    WHERE status = 'pending' AND (next_run_at IS NULL OR next_run_at >= now())
-    ORDER BY next_run_at ASC
-    For update SKIP LOCKED
+    SELECT j.id FROM jobs j
+    WHERE j.status = 'pending'
+      AND (j.scheduled_at IS NULL OR j.scheduled_at <= now())
+      AND (j.next_run_at IS NULL OR j.next_run_at <= now())
+    ORDER BY j.next_run_at ASC NULLS LAST, j.created_at ASC
+    FOR UPDATE SKIP LOCKED
     LIMIT 1
 )
-returning *;
+RETURNING *;
 
 -- name: UpdateJobStatusSuccess :exec
-update jobs
-set status = 'success', updated_at = now(), next_run_at = NULL
+UPDATE jobs
+SET status = 'success', updated_at = now(), next_run_at = NULL
 WHERE id = $1;
 
 -- name: UpdateJobStatusNotSuccess :exec
 UPDATE jobs
-SET 
-    status = CASE 
-        WHEN retry_count < max_retries THEN 'pending' 
-        ELSE 'failed' 
+SET
+    retry_count = jobs.retry_count + 1,
+    status = CASE
+        WHEN jobs.retry_count + 1 < jobs.max_retries THEN 'pending'
+        ELSE 'failed'
     END,
-    next_run_at = CASE 
-        WHEN retry_count < max_retries THEN NOW() + INTERVAL '5 seconds' 
-        ELSE NULL 
+    next_run_at = CASE
+        WHEN jobs.retry_count + 1 < jobs.max_retries THEN NOW() + INTERVAL '5 seconds'
+        ELSE NULL
     END,
     updated_at = NOW()
 WHERE id = $1;
+
 -- name: IncrementRetryCount :one
 UPDATE jobs
 SET retry_count = retry_count + 1, updated_at = NOW()
 WHERE id = $1
-returning retry_count;
-
+RETURNING retry_count;
 
 -- name: GetStuckJobs :one
 SELECT id FROM jobs
 WHERE status = 'processing' AND updated_at < NOW() - INTERVAL '1 minute'
 FOR UPDATE SKIP LOCKED
-limit 1;
+LIMIT 1;
 
 -- name: ResetStuckJob :exec
 UPDATE jobs
 SET status = 'pending', updated_at = NOW(), next_run_at = NOW() + INTERVAL '5 seconds'
-WHERE id = $1;  
+WHERE id = $1;
