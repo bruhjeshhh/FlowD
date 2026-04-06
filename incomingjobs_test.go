@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -62,5 +65,44 @@ func TestParsePayloadType(t *testing.T) {
 	_, err = parsePayloadType(json.RawMessage(`{}`))
 	if err == nil {
 		t.Fatal("expected error for missing type")
+	}
+}
+
+func TestInsertjob_PreDatabaseValidation(t *testing.T) {
+	t.Parallel()
+	cfg := apiConfig{}
+	cases := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "invalid JSON",
+			body:       `not-json`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "null payload",
+			body:       `{"payload":null}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "missing type in payload",
+			body:       `{"payload":{"data":{}}}`,
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			cfg.insertjob(w, req)
+			if w.Code != tc.wantStatus {
+				t.Fatalf("status %d, body %s", w.Code, w.Body.String())
+			}
+		})
 	}
 }

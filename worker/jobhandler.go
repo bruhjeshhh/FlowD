@@ -1,13 +1,18 @@
 package worker
 
-func handlejobs(jobtype string, payload []byte) bool {
+import "log/slog"
+
+func handlejobs(log *slog.Logger, jobtype string, payload []byte) bool {
+	if log == nil {
+		log = slog.Default()
+	}
 	switch jobtype {
 	case "email":
-		return handleemails(payload)
+		return handleemails(log, payload)
 	case "sms":
-		return handlesms(payload)
+		return handlesms(log, payload)
 	case "push_notification":
-		return handlepushnotifications(payload)
+		return handlepushnotifications(log, payload)
 	default:
 		return false
 	}

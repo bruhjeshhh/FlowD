@@ -1,19 +1,24 @@
 package worker
 
-import "testing"
+import (
+	"io"
+	"log/slog"
+	"testing"
+)
 
 func TestHandlejobs(t *testing.T) {
 	t.Parallel()
-	if !handlejobs("email", []byte(`{}`)) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if !handlejobs(log, "email", []byte(`{}`)) {
 		t.Fatal("email should succeed (stub)")
 	}
-	if !handlejobs("sms", []byte(`{}`)) {
+	if !handlejobs(log, "sms", []byte(`{}`)) {
 		t.Fatal("sms should succeed (stub)")
 	}
-	if !handlejobs("push_notification", []byte(`{}`)) {
+	if !handlejobs(log, "push_notification", []byte(`{}`)) {
 		t.Fatal("push_notification should succeed (stub)")
 	}
-	if handlejobs("unknown", []byte(`{}`)) {
+	if handlejobs(log, "unknown", []byte(`{}`)) {
 		t.Fatal("unknown type should fail")
 	}
 }

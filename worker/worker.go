@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log"
+	"log/slog"
 	"time"
 
 	db "github.com/bruhjeshhh/flowd/internal/database"
@@ -13,12 +13,23 @@ import (
 type APIConfig struct {
 	DB       *db.Queries
 	WorkerID int
+	Log      *slog.Logger
+}
+
+func (c *APIConfig) logger() *slog.Logger {
+	if c.Log != nil {
+		return c.Log
+	}
+	return slog.Default()
 }
 
 func (c *APIConfig) WorkerFunc(ctx context.Context) {
+	log := c.logger().With("component", "worker", "worker_id", c.WorkerID)
+
 	for {
 		select {
 		case <-ctx.Done():
+			log.Info("worker stopping")
 			return
 		default:
 		}
@@ -33,7 +44,7 @@ func (c *APIConfig) WorkerFunc(ctx context.Context) {
 				}
 				continue
 			}
-			log.Printf("worker[%d] error getting job: %v", c.WorkerID, err)
+			log.Error("get job failed", "err", err)
 			select {
 			case <-ctx.Done():
 				return
@@ -42,23 +53,35 @@ func (c *APIConfig) WorkerFunc(ctx context.Context) {
 			continue
 		}
 
-		ok := handlejobs(response.Type, response.Payload)
+		jlog := log.With("job_id", response.ID.String(), "job_type", response.Type)
+		jlog.Info("job claimed")
+
+		ok := handlejobs(c.logger(), response.Type, response.Payload)
 		if ok {
 			if err := c.DB.UpdateJobStatusSuccess(ctx, response.ID); err != nil {
-				log.Printf("worker[%d] error updating job status: %v", c.WorkerID, err)
+				jlog.Error("mark success failed", "err", err)
+				continue
 			}
+			jlog.Info("job succeeded")
 		} else {
 			if err := c.DB.UpdateJobStatusNotSuccess(ctx, response.ID); err != nil {
-				log.Printf("worker[%d] error updating job status: %v", c.WorkerID, err)
+				jlog.Error("mark failure/retry failed", "err", err)
+				continue
 			}
+			jlog.Info("job handler failed, updated for retry or terminal fail",
+				"retry_count", response.RetryCount,
+				"max_retries", response.MaxRetries)
 		}
 	}
 }
 
 func (c *APIConfig) RescuerFunc(ctx context.Context) {
+	log := c.logger().With("component", "rescuer")
+
 	for {
 		select {
 		case <-ctx.Done():
+			log.Info("rescuer stopping")
 			return
 		default:
 		}
@@ -73,7 +96,7 @@ func (c *APIConfig) RescuerFunc(ctx context.Context) {
 				}
 				continue
 			}
-			log.Printf("rescuer error getting stuck job: %v", err)
+			log.Error("get stuck job failed", "err", err)
 			select {
 			case <-ctx.Done():
 				return
@@ -82,8 +105,9 @@ func (c *APIConfig) RescuerFunc(ctx context.Context) {
 			continue
 		}
 
+		log.Info("resetting stuck job", "job_id", id.String())
 		if err := c.DB.ResetStuckJob(ctx, id); err != nil {
-			log.Printf("rescuer error resetting stuck job: %v", err)
+			log.Error("reset stuck job failed", "job_id", id.String(), "err", err)
 		}
 	}
 }

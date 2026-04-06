@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,14 +25,19 @@ type apiConfig struct {
 func main() {
 	_ = godotenv.Load()
 
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(logger)
+
 	dburl := os.Getenv("DB_URL")
 	if dburl == "" {
-		log.Fatal("DB_URL is required")
+		logger.Error("DB_URL is required")
+		os.Exit(1)
 	}
 
 	dbz, err := sql.Open("postgres", dburl)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("sql open", "err", err)
+		os.Exit(1)
 	}
 	defer dbz.Close()
 
@@ -42,7 +47,8 @@ func main() {
 
 	ctx := context.Background()
 	if err := dbz.PingContext(ctx); err != nil {
-		log.Fatalf("database ping: %v", err)
+		logger.Error("database ping", "err", err)
+		os.Exit(1)
 	}
 
 	dbQueries := db.New(dbz)
@@ -72,23 +78,24 @@ func main() {
 	defer workerStop()
 
 	for i := 1; i <= workerCount; i++ {
-		workerCfg := &worker.APIConfig{DB: dbQueries, WorkerID: i}
+		workerCfg := &worker.APIConfig{DB: dbQueries, WorkerID: i, Log: logger}
 		go workerCfg.WorkerFunc(workerCtx)
 	}
-	rescuerCfg := &worker.APIConfig{DB: dbQueries, WorkerID: 0}
+	rescuerCfg := &worker.APIConfig{DB: dbQueries, WorkerID: 0, Log: logger}
 	go rescuerCfg.RescuerFunc(workerCtx)
 
 	go func() {
-		log.Printf("listening on %s (%d workers + rescuer)", srv.Addr, workerCount)
+		logger.Info("http listening", "addr", srv.Addr, "workers", workerCount)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server: %v", err)
+			logger.Error("server", "err", err)
+			os.Exit(1)
 		}
 	}()
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
-	log.Printf("shutting down")
+	logger.Info("shutting down")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -96,7 +103,7 @@ func main() {
 	workerStop()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Printf("server shutdown: %v", err)
+		logger.Error("server shutdown", "err", err)
 	}
-	log.Printf("bye")
+	logger.Info("bye")
 }

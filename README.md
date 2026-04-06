@@ -11,6 +11,8 @@ Postgres-backed **job queue** in Go: HTTP enqueue, background workers that claim
 
 Workers are stubs (log + success) but the pipeline is real: claim → process → `success` / retry / `failed`.
 
+**Structured logs** — the process uses `log/slog` with JSON to stdout. Workers and the rescuer attach `worker_id`, `job_id`, and `job_type` where applicable so you can trace a job through claim → success or retry.
+
 ## Requirements
 
 - Go **1.23+**
@@ -67,6 +69,7 @@ SQL is generated with **sqlc** from `migrations/queries/jobs.sql`. Goose-style f
 ## Tests
 
 ```bash
+go vet ./...
 go test ./... -count=1
 ```
 
@@ -76,6 +79,10 @@ Integration (needs `DB_URL` and schema applied):
 export DB_URL='postgres://postgres:postgres@localhost:5432/flowD_db?sslmode=disable'
 go test -tags=integration ./... -count=1
 ```
+
+## After the sprint (low-effort GitHub rhythm)
+
+When you are focused on DSA or other priorities, short sessions (~10–30 minutes) are enough to keep the repo looking active: merge a Dependabot PR, bump a patch dependency, add one small test, fix a typo in the README, or tighten an error message. Avoid starting large new features in those slots.
 
 ## License
 

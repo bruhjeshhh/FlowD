@@ -1,18 +1,18 @@
 package worker
 
-import "log"
+import "log/slog"
 
-func handleemails(payload []byte) bool {
-	log.Printf("Handling email job" + string(payload))
+func handleemails(log *slog.Logger, payload []byte) bool {
+	log.Info("handling email job", "payload_len", len(payload))
 	return true
 }
 
-func handlesms(payload []byte) bool {
-	log.Printf("Handling SMS job" + string(payload))
+func handlesms(log *slog.Logger, payload []byte) bool {
+	log.Info("handling sms job", "payload_len", len(payload))
 	return true
 }
 
-func handlepushnotifications(payload []byte) bool {
-	log.Printf("Handling push notification job" + string(payload))
+func handlepushnotifications(log *slog.Logger, payload []byte) bool {
+	log.Info("handling push_notification job", "payload_len", len(payload))
 	return true
 }

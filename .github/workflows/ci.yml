@@ -38,9 +38,10 @@ jobs:
           PGPASSWORD: postgres
         run: psql -h localhost -U postgres -d flowD_db -f scripts/schema.sql
 
-      - name: Go test
+      - name: Go vet and test
         env:
           DB_URL: postgres://postgres:postgres@localhost:5432/flowD_db?sslmode=disable
         run: |
+          go vet ./...
           go test ./... -count=1
           go test -tags=integration ./... -count=1
