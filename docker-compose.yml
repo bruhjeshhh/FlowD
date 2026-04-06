@@ -1,15 +1,33 @@
 services:
   postgres:
     image: postgres:16
-    container_name: flowD
+    container_name: flowd-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: flowD_db
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./scripts/schema.sql:/docker-entrypoint-initdb.d/01-flowd.sql:ro
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d flowD_db"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    container_name: flowd-app
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: postgres://postgres:postgres@postgres:5432/flowD_db?sslmode=disable
+      WORKER_COUNT: "4"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   pgdata:
