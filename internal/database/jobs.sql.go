@@ -182,6 +182,54 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 	return i, err
 }
 
+const listJobsByStatus = `-- name: ListJobsByStatus :many
+SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at FROM jobs
+WHERE status = $1
+ORDER BY updated_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListJobsByStatusParams struct {
+	Status sql.NullString
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) ListJobsByStatus(ctx context.Context, arg ListJobsByStatusParams) ([]Job, error) {
+	rows, err := q.db.QueryContext(ctx, listJobsByStatus, arg.Status, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Job
+	for rows.Next() {
+		var i Job
+		if err := rows.Scan(
+			&i.ID,
+			&i.Payload,
+			&i.Status,
+			&i.Type,
+			&i.RetryCount,
+			&i.MaxRetries,
+			&i.IdempotencyKey,
+			&i.ScheduledAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.NextRunAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resetStuckJob = `-- name: ResetStuckJob :exec
 UPDATE jobs
 SET status = 'pending', updated_at = NOW(), next_run_at = NOW() + INTERVAL '5 seconds'
@@ -202,7 +250,11 @@ SET
         ELSE 'failed'
     END,
     next_run_at = CASE
-        WHEN jobs.retry_count + 1 < jobs.max_retries THEN NOW() + INTERVAL '5 seconds'
+        WHEN jobs.retry_count + 1 < jobs.max_retries THEN NOW() + (
+            INTERVAL '1 second' * (
+                5 * POWER(2::numeric, LEAST(jobs.retry_count::numeric, 30))
+            )
+        )
         ELSE NULL
     END,
     updated_at = NOW()

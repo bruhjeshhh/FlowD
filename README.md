@@ -7,6 +7,7 @@ Postgres-backed **job queue** in Go: HTTP enqueue, background workers that claim
 - **POST /jobs** — enqueue JSON payload with `type` (`email`, `sms`, `push_notification`). Optional `scheduled_at`, optional `idempotency_key`.
 - **Idempotent enqueue** — same `idempotency_key` returns **200** with `idempotent_replay: true` and the existing job; first create returns **201**. Implemented with a **database transaction** (read key → insert; handles races via unique constraint).
 - **GET /jobs/{id}** — inspect a job.
+- **GET /jobs?status=failed** — **dead-letter queue**: list terminal failed jobs (`limit` default 50, max 200; `offset` for paging). Use for ops dashboards or manual replay workflows.
 - **GET /health** — liveness; pings Postgres.
 
 Workers are stubs (log + success) but the pipeline is real: claim → process → `success` / retry / `failed`.
@@ -39,6 +40,8 @@ curl -sS -X POST http://localhost:8080/jobs \
   }' | jq .
 
 curl -sS http://localhost:8080/health | jq .
+
+curl -sS 'http://localhost:8080/jobs?status=failed&limit=10' | jq .
 ```
 
 Repeat the same `idempotency_key` to see `idempotent_replay: true`.
@@ -80,7 +83,9 @@ flowchart LR
 |--------|--------|
 | Safe concurrency | `FOR UPDATE SKIP LOCKED` so many workers can dequeue without double-claim |
 | Delivery | At-least-once; combine with **idempotent handlers** in production |
-| Retries | `retry_count` incremented on failure; `next_run_at` backoff before `failed` |
+| Retries | `retry_count` incremented on failure; after `max_retries` the job is `failed` (dead-letter) |
+| Exponential backoff | Before terminal failure, `next_run_at = now + (5s × 2^n)` where `n` is the **current** `retry_count` before the failing attempt (so first retry waits 5s, then 10s, 20s, …). The exponent is capped at 30 to bound the delay. |
+| Dead-letter queue | Jobs in `failed` stay in the same table; list them with **GET /jobs?status=failed** for inspection or to drive a separate replay process. |
 | Stuck jobs | Rescuer resets `processing` rows idle longer than 1 minute |
 
 SQL is generated with **sqlc** from `migrations/queries/jobs.sql`. Goose-style files under `migrations/schema/` document migrations; `scripts/schema.sql` is a single-file bootstrap for Docker and CI.

@@ -18,6 +18,12 @@ SELECT * FROM jobs
 WHERE id = $1
 LIMIT 1;
 
+-- name: ListJobsByStatus :many
+SELECT * FROM jobs
+WHERE status = $1
+ORDER BY updated_at DESC
+LIMIT $2 OFFSET $3;
+
 -- name: GetJobByScheduledAt :one
 UPDATE jobs
 SET status = 'processing', updated_at = now()
@@ -46,7 +52,11 @@ SET
         ELSE 'failed'
     END,
     next_run_at = CASE
-        WHEN jobs.retry_count + 1 < jobs.max_retries THEN NOW() + INTERVAL '5 seconds'
+        WHEN jobs.retry_count + 1 < jobs.max_retries THEN NOW() + (
+            INTERVAL '1 second' * (
+                5 * POWER(2::numeric, LEAST(jobs.retry_count::numeric, 30))
+            )
+        )
         ELSE NULL
     END,
     updated_at = NOW()

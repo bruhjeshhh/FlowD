@@ -56,6 +56,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /jobs", cfg.insertjob)
+	mux.HandleFunc("GET /jobs", cfg.listJobs)
 	mux.HandleFunc("GET /jobs/{id}", cfg.getJob)
 	mux.HandleFunc("GET /health", cfg.health)
 
