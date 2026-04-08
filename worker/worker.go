@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/bruhjeshhh/flowd/metrics"
+
 	db "github.com/bruhjeshhh/flowd/internal/database"
 )
 
@@ -25,6 +27,9 @@ func (c *APIConfig) logger() *slog.Logger {
 
 func (c *APIConfig) WorkerFunc(ctx context.Context) {
 	log := c.logger().With("component", "worker", "worker_id", c.WorkerID)
+
+	metrics.WorkersActive.Inc()
+	defer metrics.WorkersActive.Dec()
 
 	for {
 		select {
@@ -56,18 +61,25 @@ func (c *APIConfig) WorkerFunc(ctx context.Context) {
 		jlog := log.With("job_id", response.ID.String(), "job_type", response.Type)
 		jlog.Info("job claimed")
 
+		start := time.Now()
 		ok := handlejobs(c.logger(), response.Type, response.Payload)
+		duration := time.Since(start).Seconds()
+
 		if ok {
 			if err := c.DB.UpdateJobStatusSuccess(ctx, response.ID); err != nil {
 				jlog.Error("mark success failed", "err", err)
 				continue
 			}
+			metrics.JobsProcessed.WithLabelValues(response.Type, "success").Inc()
+			metrics.JobDuration.WithLabelValues(response.Type).Observe(duration)
 			jlog.Info("job succeeded")
 		} else {
 			if err := c.DB.UpdateJobStatusNotSuccess(ctx, response.ID); err != nil {
 				jlog.Error("mark failure/retry failed", "err", err)
 				continue
 			}
+			metrics.JobsProcessed.WithLabelValues(response.Type, "failed").Inc()
+			metrics.JobDuration.WithLabelValues(response.Type).Observe(duration)
 			jlog.Info("job handler failed, updated for retry or terminal fail",
 				"retry_count", response.RetryCount,
 				"max_retries", response.MaxRetries)

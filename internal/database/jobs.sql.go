@@ -14,6 +14,38 @@ import (
 	"github.com/google/uuid"
 )
 
+const countJobsByStatus = `-- name: CountJobsByStatus :many
+SELECT status, COUNT(*) as count FROM jobs GROUP BY status
+`
+
+type CountJobsByStatusRow struct {
+	Status sql.NullString
+	Count  int64
+}
+
+func (q *Queries) CountJobsByStatus(ctx context.Context) ([]CountJobsByStatusRow, error) {
+	rows, err := q.db.QueryContext(ctx, countJobsByStatus)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountJobsByStatusRow
+	for rows.Next() {
+		var i CountJobsByStatusRow
+		if err := rows.Scan(&i.Status, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getJobByID = `-- name: GetJobByID :one
 SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at FROM jobs
 WHERE id = $1

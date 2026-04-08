@@ -78,3 +78,6 @@ LIMIT 1;
 UPDATE jobs
 SET status = 'pending', updated_at = NOW(), next_run_at = NOW() + INTERVAL '5 seconds'
 WHERE id = $1;
+
+-- name: CountJobsByStatus :many
+SELECT status, COUNT(*) as count FROM jobs GROUP BY status;

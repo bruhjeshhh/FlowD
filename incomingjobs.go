@@ -8,6 +8,7 @@ import (
 	"time"
 
 	db "github.com/bruhjeshhh/flowd/internal/database"
+	"github.com/bruhjeshhh/flowd/metrics"
 	"github.com/google/uuid"
 )
 
@@ -157,6 +158,8 @@ func (c *apiConfig) insertjob(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "database error")
 		return
 	}
+
+	metrics.JobsEnqueued.WithLabelValues(jobType).Inc()
 
 	respondWithJson(w, http.StatusCreated, createJobResponse{
 		Job:              jobToOut(job),

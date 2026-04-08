@@ -12,14 +12,58 @@ import (
 	"time"
 
 	db "github.com/bruhjeshhh/flowd/internal/database"
+	"github.com/bruhjeshhh/flowd/metrics"
 	"github.com/bruhjeshhh/flowd/worker"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type apiConfig struct {
 	db     *db.Queries
 	dbConn *sql.DB
+}
+
+func instrumentHandler(method, path string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		next(rw, r)
+		duration := time.Since(start).Seconds()
+		metrics.HTTPRequestsTotal.WithLabelValues(method, path, strconv.Itoa(rw.statusCode)).Inc()
+		metrics.HTTPRequestDuration.WithLabelValues(method, path).Observe(duration)
+	}
+}
+
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func updateQueueMetrics(ctx context.Context, q *db.Queries) {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			counts, err := q.CountJobsByStatus(ctx)
+			if err != nil {
+				continue
+			}
+			for _, c := range counts {
+				if c.Status.Valid {
+					metrics.JobsInQueue.WithLabelValues(c.Status.String).Set(float64(c.Count))
+				}
+			}
+		}
+	}
 }
 
 func main() {
@@ -55,10 +99,11 @@ func main() {
 	cfg := apiConfig{db: dbQueries, dbConn: dbz}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /jobs", cfg.insertjob)
-	mux.HandleFunc("GET /jobs", cfg.listJobs)
-	mux.HandleFunc("GET /jobs/{id}", cfg.getJob)
-	mux.HandleFunc("GET /health", cfg.health)
+	mux.HandleFunc("POST /jobs", instrumentHandler("POST", "/jobs", cfg.insertjob))
+	mux.HandleFunc("GET /jobs", instrumentHandler("GET", "/jobs", cfg.listJobs))
+	mux.HandleFunc("GET /jobs/{id}", instrumentHandler("GET", "/jobs/{id}", cfg.getJob))
+	mux.HandleFunc("GET /health", instrumentHandler("GET", "/health", cfg.health))
+	mux.Handle("/metrics", promhttp.Handler())
 
 	srv := &http.Server{
 		Addr:              ":8080",
@@ -84,6 +129,8 @@ func main() {
 	}
 	rescuerCfg := &worker.APIConfig{DB: dbQueries, WorkerID: 0, Log: logger}
 	go rescuerCfg.RescuerFunc(workerCtx)
+
+	go updateQueueMetrics(workerCtx, dbQueries)
 
 	go func() {
 		logger.Info("http listening", "addr", srv.Addr, "workers", workerCount)
