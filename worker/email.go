@@ -93,6 +93,10 @@ func sendEmail(host, port, username, password, from string, email *EmailPayload)
 		to = append(to, email.CC...)
 	}
 
+	if email.Headers["Reply-To"] == "" && from != "" {
+		msg.WriteString(fmt.Sprintf("Reply-To: %s\r\n", from))
+	}
+
 	for k, v := range email.Headers {
 		msg.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
 	}
