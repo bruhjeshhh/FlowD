@@ -14,6 +14,17 @@ import (
 	"github.com/google/uuid"
 )
 
+const countDeadLetterJobs = `-- name: CountDeadLetterJobs :one
+SELECT COUNT(*) as count FROM dead_letter_jobs
+`
+
+func (q *Queries) CountDeadLetterJobs(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countDeadLetterJobs)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countJobsByStatus = `-- name: CountJobsByStatus :many
 SELECT status, COUNT(*) as count FROM jobs GROUP BY status
 `
@@ -44,6 +55,90 @@ func (q *Queries) CountJobsByStatus(ctx context.Context) ([]CountJobsByStatusRow
 		return nil, err
 	}
 	return items, nil
+}
+
+const createDeadLetterJob = `-- name: CreateDeadLetterJob :one
+INSERT INTO dead_letter_jobs(
+    id, job_id, payload, status, type, retry_count, max_retries,
+    idempotency_key, scheduled_at, created_at, failure_reason, original_error
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, job_id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, failure_reason, original_error
+`
+
+type CreateDeadLetterJobParams struct {
+	ID             uuid.UUID
+	JobID          uuid.UUID
+	Payload        json.RawMessage
+	Status         string
+	Type           string
+	RetryCount     int32
+	MaxRetries     int32
+	IdempotencyKey sql.NullString
+	ScheduledAt    sql.NullTime
+	CreatedAt      time.Time
+	FailureReason  sql.NullString
+	OriginalError  sql.NullString
+}
+
+// Create DLQ table
+func (q *Queries) CreateDeadLetterJob(ctx context.Context, arg CreateDeadLetterJobParams) (DeadLetterJob, error) {
+	row := q.db.QueryRowContext(ctx, createDeadLetterJob,
+		arg.ID,
+		arg.JobID,
+		arg.Payload,
+		arg.Status,
+		arg.Type,
+		arg.RetryCount,
+		arg.MaxRetries,
+		arg.IdempotencyKey,
+		arg.ScheduledAt,
+		arg.CreatedAt,
+		arg.FailureReason,
+		arg.OriginalError,
+	)
+	var i DeadLetterJob
+	err := row.Scan(
+		&i.ID,
+		&i.JobID,
+		&i.Payload,
+		&i.Status,
+		&i.Type,
+		&i.RetryCount,
+		&i.MaxRetries,
+		&i.IdempotencyKey,
+		&i.ScheduledAt,
+		&i.CreatedAt,
+		&i.FailureReason,
+		&i.OriginalError,
+	)
+	return i, err
+}
+
+const getDeadLetterJobByID = `-- name: GetDeadLetterJobByID :one
+SELECT id, job_id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, failure_reason, original_error FROM dead_letter_jobs
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetDeadLetterJobByID(ctx context.Context, id uuid.UUID) (DeadLetterJob, error) {
+	row := q.db.QueryRowContext(ctx, getDeadLetterJobByID, id)
+	var i DeadLetterJob
+	err := row.Scan(
+		&i.ID,
+		&i.JobID,
+		&i.Payload,
+		&i.Status,
+		&i.Type,
+		&i.RetryCount,
+		&i.MaxRetries,
+		&i.IdempotencyKey,
+		&i.ScheduledAt,
+		&i.CreatedAt,
+		&i.FailureReason,
+		&i.OriginalError,
+	)
+	return i, err
 }
 
 const getJobByID = `-- name: GetJobByID :one
@@ -212,6 +307,53 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 		&i.NextRunAt,
 	)
 	return i, err
+}
+
+const listDeadLetterJobs = `-- name: ListDeadLetterJobs :many
+SELECT id, job_id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, failure_reason, original_error FROM dead_letter_jobs
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListDeadLetterJobsParams struct {
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) ListDeadLetterJobs(ctx context.Context, arg ListDeadLetterJobsParams) ([]DeadLetterJob, error) {
+	rows, err := q.db.QueryContext(ctx, listDeadLetterJobs, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeadLetterJob
+	for rows.Next() {
+		var i DeadLetterJob
+		if err := rows.Scan(
+			&i.ID,
+			&i.JobID,
+			&i.Payload,
+			&i.Status,
+			&i.Type,
+			&i.RetryCount,
+			&i.MaxRetries,
+			&i.IdempotencyKey,
+			&i.ScheduledAt,
+			&i.CreatedAt,
+			&i.FailureReason,
+			&i.OriginalError,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listJobsByStatus = `-- name: ListJobsByStatus :many

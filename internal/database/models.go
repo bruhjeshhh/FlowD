@@ -12,6 +12,21 @@ import (
 	"github.com/google/uuid"
 )
 
+type DeadLetterJob struct {
+	ID             uuid.UUID
+	JobID          uuid.UUID
+	Payload        json.RawMessage
+	Status         string
+	Type           string
+	RetryCount     int32
+	MaxRetries     int32
+	IdempotencyKey sql.NullString
+	ScheduledAt    sql.NullTime
+	CreatedAt      time.Time
+	FailureReason  sql.NullString
+	OriginalError  sql.NullString
+}
+
 type Job struct {
 	ID             uuid.UUID
 	Payload        json.RawMessage

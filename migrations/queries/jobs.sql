@@ -81,3 +81,25 @@ WHERE id = $1;
 
 -- name: CountJobsByStatus :many
 SELECT status, COUNT(*) as count FROM jobs GROUP BY status;
+
+-- Create DLQ table
+-- name: CreateDeadLetterJob :one
+INSERT INTO dead_letter_jobs(
+    id, job_id, payload, status, type, retry_count, max_retries,
+    idempotency_key, scheduled_at, created_at, failure_reason, original_error
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING *;
+
+-- name: ListDeadLetterJobs :many
+SELECT * FROM dead_letter_jobs
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: GetDeadLetterJobByID :one
+SELECT * FROM dead_letter_jobs
+WHERE id = $1
+LIMIT 1;
+
+-- name: CountDeadLetterJobs :one
+SELECT COUNT(*) as count FROM dead_letter_jobs;

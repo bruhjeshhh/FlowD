@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/bruhjeshhh/flowd/metrics"
+	"github.com/google/uuid"
 
 	db "github.com/bruhjeshhh/flowd/internal/database"
 )
@@ -62,10 +64,10 @@ func (c *APIConfig) WorkerFunc(ctx context.Context) {
 		jlog.Info("job claimed")
 
 		start := time.Now()
-		ok := handlejobs(c.logger(), response.Type, response.Payload)
+		result := handlejobs(c.logger(), response.Type, response.Payload)
 		duration := time.Since(start).Seconds()
 
-		if ok {
+		if result.Success {
 			if err := c.DB.UpdateJobStatusSuccess(ctx, response.ID); err != nil {
 				jlog.Error("mark success failed", "err", err)
 				continue
@@ -78,10 +80,38 @@ func (c *APIConfig) WorkerFunc(ctx context.Context) {
 				jlog.Error("mark failure/retry failed", "err", err)
 				continue
 			}
+
+			newRetryCount := response.RetryCount + 1
+			if newRetryCount >= response.MaxRetries {
+				errMsg := ""
+				if result.Error != nil {
+					errMsg = result.Error.Error()
+				}
+				dlqParams := db.CreateDeadLetterJobParams{
+					ID:             uuid.New(),
+					JobID:          response.ID,
+					Payload:        response.Payload,
+					Status:         "dead",
+					Type:           response.Type,
+					RetryCount:     newRetryCount,
+					MaxRetries:     response.MaxRetries,
+					IdempotencyKey: sql.NullString{String: response.IdempotencyKey, Valid: true},
+					ScheduledAt:    response.ScheduledAt,
+					CreatedAt:      time.Now(),
+					FailureReason:  sql.NullString{String: fmt.Sprintf("failed after %d retries", newRetryCount), Valid: true},
+					OriginalError:  sql.NullString{String: errMsg, Valid: errMsg != ""},
+				}
+				if _, err := c.DB.CreateDeadLetterJob(ctx, dlqParams); err != nil {
+					jlog.Error("failed to move job to DLQ", "err", err)
+				} else {
+					jlog.Info("job moved to DLQ after max retries", "retry_count", newRetryCount)
+				}
+			}
+
 			metrics.JobsProcessed.WithLabelValues(response.Type, "failed").Inc()
 			metrics.JobDuration.WithLabelValues(response.Type).Observe(duration)
 			jlog.Info("job handler failed, updated for retry or terminal fail",
-				"retry_count", response.RetryCount,
+				"retry_count", newRetryCount,
 				"max_retries", response.MaxRetries)
 		}
 	}

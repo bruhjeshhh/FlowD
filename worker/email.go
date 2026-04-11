@@ -20,16 +20,16 @@ type EmailPayload struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
-func handleemails(log *slog.Logger, payload []byte) bool {
+func handleemails(log *slog.Logger, payload []byte) (bool, error) {
 	var email EmailPayload
 	if err := json.Unmarshal(payload, &email); err != nil {
 		log.Error("failed to parse email payload", "error", err)
-		return false
+		return false, fmt.Errorf("parse payload: %w", err)
 	}
 
 	if email.To == "" {
 		log.Error("email 'to' field is required")
-		return false
+		return false, fmt.Errorf("missing 'to' field")
 	}
 
 	if email.Subject == "" {
@@ -38,7 +38,7 @@ func handleemails(log *slog.Logger, payload []byte) bool {
 
 	if email.Body == "" && email.HTML == "" {
 		log.Error("email body or html is required")
-		return false
+		return false, fmt.Errorf("missing body and html")
 	}
 
 	smtpHost := os.Getenv("SMTP_HOST")
@@ -49,7 +49,7 @@ func handleemails(log *slog.Logger, payload []byte) bool {
 
 	if smtpHost == "" {
 		log.Error("SMTP_HOST not configured")
-		return false
+		return false, fmt.Errorf("SMTP_HOST not configured")
 	}
 
 	if smtpFrom == "" {
@@ -63,11 +63,11 @@ func handleemails(log *slog.Logger, payload []byte) bool {
 
 	if err := sendEmail(smtpHost, smtpPort, smtpUsername, smtpPassword, from, &email); err != nil {
 		log.Error("failed to send email", "error", err)
-		return false
+		return false, fmt.Errorf("send email: %w", err)
 	}
 
 	log.Info("email sent successfully", "to", email.To, "subject", email.Subject)
-	return true
+	return true, nil
 }
 
 func sendEmail(host, port, username, password, from string, email *EmailPayload) error {

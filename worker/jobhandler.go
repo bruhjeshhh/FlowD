@@ -2,18 +2,26 @@ package worker
 
 import "log/slog"
 
-func handlejobs(log *slog.Logger, jobtype string, payload []byte) bool {
+type JobResult struct {
+	Success bool
+	Error   error
+}
+
+func handlejobs(log *slog.Logger, jobtype string, payload []byte) JobResult {
 	if log == nil {
 		log = slog.Default()
 	}
 	switch jobtype {
 	case "email":
-		return handleemails(log, payload)
+		ok, err := handleemails(log, payload)
+		return JobResult{Success: ok, Error: err}
 	case "sms":
-		return handlesms(log, payload)
+		ok, err := handlesms(log, payload)
+		return JobResult{Success: ok, Error: err}
 	case "push_notification":
-		return handlepushnotifications(log, payload)
+		ok, err := handlepushnotifications(log, payload)
+		return JobResult{Success: ok, Error: err}
 	default:
-		return false
+		return JobResult{Success: false, Error: nil}
 	}
 }
