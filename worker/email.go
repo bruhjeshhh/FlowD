@@ -77,8 +77,15 @@ func sendEmail(host, port, username, password, from string, email *EmailPayload)
 	msg.WriteString(fmt.Sprintf("To: %s\r\n", email.To))
 	msg.WriteString(fmt.Sprintf("Subject: %s\r\n", email.Subject))
 
+	to := []string{email.To}
+	if len(email.BCC) > 0 {
+		msg.WriteString(fmt.Sprintf("Bcc: %s\r\n", strings.Join(email.BCC, ",")))
+		to = append(to, email.BCC...)
+	}
+
 	if len(email.CC) > 0 {
 		msg.WriteString(fmt.Sprintf("Cc: %s\r\n", strings.Join(email.CC, ",")))
+		to = append(to, email.CC...)
 	}
 
 	for k, v := range email.Headers {
@@ -99,14 +106,6 @@ func sendEmail(host, port, username, password, from string, email *EmailPayload)
 		msg.WriteString(email.HTML)
 	} else {
 		msg.WriteString(email.Body)
-	}
-
-	to := []string{email.To}
-	if len(email.CC) > 0 {
-		to = append(to, email.CC...)
-	}
-	if len(email.BCC) > 0 {
-		to = append(to, email.BCC...)
 	}
 
 	addr := fmt.Sprintf("%s:%s", host, port)
