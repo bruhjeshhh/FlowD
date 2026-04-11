@@ -32,6 +32,11 @@ func handleemails(log *slog.Logger, payload []byte) (bool, error) {
 		return false, fmt.Errorf("missing 'to' field")
 	}
 
+	if email.From != "" && !strings.Contains(email.From, "@") {
+		log.Error("email 'from' field is invalid")
+		return false, fmt.Errorf("invalid 'from' field")
+	}
+
 	if email.Subject == "" {
 		email.Subject = "No Subject"
 	}
