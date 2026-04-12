@@ -101,5 +101,14 @@ SELECT * FROM dead_letter_jobs
 WHERE id = $1
 LIMIT 1;
 
+-- name: CancelJob :one
+UPDATE jobs
+SET status = 'cancelled', updated_at = NOW()
+WHERE id = $1 AND status IN ('pending', 'processing')
+RETURNING *;
+
 -- name: CountDeadLetterJobs :one
 SELECT COUNT(*) as count FROM dead_letter_jobs;
+
+-- name: DeleteDeadLetterJob :exec
+DELETE FROM dead_letter_jobs WHERE id = $1;

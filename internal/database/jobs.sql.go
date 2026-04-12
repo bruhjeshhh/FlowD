@@ -14,6 +14,32 @@ import (
 	"github.com/google/uuid"
 )
 
+const cancelJob = `-- name: CancelJob :one
+UPDATE jobs
+SET status = 'cancelled', updated_at = NOW()
+WHERE id = $1 AND status IN ('pending', 'processing')
+RETURNING id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at
+`
+
+func (q *Queries) CancelJob(ctx context.Context, id uuid.UUID) (Job, error) {
+	row := q.db.QueryRowContext(ctx, cancelJob, id)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.Payload,
+		&i.Status,
+		&i.Type,
+		&i.RetryCount,
+		&i.MaxRetries,
+		&i.IdempotencyKey,
+		&i.ScheduledAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.NextRunAt,
+	)
+	return i, err
+}
+
 const countDeadLetterJobs = `-- name: CountDeadLetterJobs :one
 SELECT COUNT(*) as count FROM dead_letter_jobs
 `
@@ -113,6 +139,15 @@ func (q *Queries) CreateDeadLetterJob(ctx context.Context, arg CreateDeadLetterJ
 		&i.OriginalError,
 	)
 	return i, err
+}
+
+const deleteDeadLetterJob = `-- name: DeleteDeadLetterJob :exec
+DELETE FROM dead_letter_jobs WHERE id = $1
+`
+
+func (q *Queries) DeleteDeadLetterJob(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteDeadLetterJob, id)
+	return err
 }
 
 const getDeadLetterJobByID = `-- name: GetDeadLetterJobByID :one

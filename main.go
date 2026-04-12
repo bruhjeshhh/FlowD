@@ -100,8 +100,11 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /jobs", instrumentHandler("POST", "/jobs", cfg.insertjob))
+	mux.HandleFunc("POST /jobs/batch", instrumentHandler("POST", "/jobs/batch", cfg.batchInsertJobs))
 	mux.HandleFunc("GET /jobs", instrumentHandler("GET", "/jobs", cfg.listJobs))
 	mux.HandleFunc("GET /jobs/{id}", instrumentHandler("GET", "/jobs/{id}", cfg.getJob))
+	mux.HandleFunc("DELETE /jobs/{id}", instrumentHandler("DELETE", "/jobs/{id}", cfg.cancelJob))
+	mux.HandleFunc("POST /jobs/{id}/replay", instrumentHandler("POST", "/jobs/{id}/replay", cfg.replayJob))
 	mux.HandleFunc("GET /health", instrumentHandler("GET", "/health", cfg.health))
 	mux.Handle("/metrics", promhttp.Handler())
 
