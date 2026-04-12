@@ -124,7 +124,7 @@ func (c *apiConfig) insertjob(w http.ResponseWriter, r *http.Request) {
 		Status:         sql.NullString{String: "pending", Valid: true},
 		Type:           jobType,
 		RetryCount:     0,
-		MaxRetries:     3,
+		MaxRetries:     GetMaxRetriesForJobType(jobType),
 		IdempotencyKey: pld.IdempotencyKey,
 		ScheduledAt:    sql.NullTime{Time: pld.ScheduledAt, Valid: !pld.ScheduledAt.IsZero()},
 		CreatedAt:      now,
