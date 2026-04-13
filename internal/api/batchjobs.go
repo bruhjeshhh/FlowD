@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"database/sql"
@@ -7,7 +7,7 @@ import (
 	"time"
 
 	db "github.com/bruhjeshhh/flowd/internal/database"
-	"github.com/bruhjeshhh/flowd/metrics"
+	"github.com/bruhjeshhh/flowd/internal/metrics"
 	"github.com/google/uuid"
 )
 
@@ -22,7 +22,7 @@ type batchJobResult struct {
 	Idempotent bool   `json:"idempotent_replay,omitempty"`
 }
 
-func (c *apiConfig) batchInsertJobs(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) BatchInsertJobs(w http.ResponseWriter, r *http.Request) {
 	decode := json.NewDecoder(r.Body)
 	var req batchJobRequest
 	if err := decode.Decode(&req); err != nil {
@@ -75,7 +75,7 @@ func (c *apiConfig) batchInsertJobs(w http.ResponseWriter, r *http.Request) {
 				idempotencyKey = uuid.New().String()
 			}
 
-			tx, err := c.dbConn.BeginTx(ctx, nil)
+			tx, err := h.dbConn.BeginTx(ctx, nil)
 			if err != nil {
 				typeCh <- jobResult{idx, batchJobResult{
 					Success: false,
@@ -85,7 +85,7 @@ func (c *apiConfig) batchInsertJobs(w http.ResponseWriter, r *http.Request) {
 			}
 			defer func() { _ = tx.Rollback() }()
 
-			qtx := c.db.WithTx(tx)
+			qtx := h.db.WithTx(tx)
 
 			existing, err := qtx.GetJobByIdempotencyKey(ctx, idempotencyKey)
 			if err == nil {
@@ -111,7 +111,7 @@ func (c *apiConfig) batchInsertJobs(w http.ResponseWriter, r *http.Request) {
 				Status:         sql.NullString{String: "pending", Valid: true},
 				Type:           jobType,
 				RetryCount:     0,
-				MaxRetries:     GetMaxRetriesForJobType(jobType),
+				MaxRetries:     h.GetMaxRetries(jobType),
 				IdempotencyKey: idempotencyKey,
 				ScheduledAt:    sql.NullTime{Time: p.ScheduledAt, Valid: !p.ScheduledAt.IsZero()},
 				CreatedAt:      now,

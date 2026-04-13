@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"database/sql"
@@ -8,7 +8,7 @@ import (
 	"time"
 
 	db "github.com/bruhjeshhh/flowd/internal/database"
-	"github.com/bruhjeshhh/flowd/metrics"
+	"github.com/bruhjeshhh/flowd/internal/metrics"
 	"github.com/google/uuid"
 )
 
@@ -67,7 +67,7 @@ func nextRunAt(now time.Time, scheduledAt time.Time) time.Time {
 	return now
 }
 
-func (c *apiConfig) insertjob(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) InsertJob(w http.ResponseWriter, r *http.Request) {
 	decode := json.NewDecoder(r.Body)
 	pld := incoming{}
 	if err := decode.Decode(&pld); err != nil {
@@ -92,14 +92,14 @@ func (c *apiConfig) insertjob(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	now := time.Now().UTC()
 
-	tx, err := c.dbConn.BeginTx(ctx, nil)
+	tx, err := h.dbConn.BeginTx(ctx, nil)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	qtx := c.db.WithTx(tx)
+	qtx := h.db.WithTx(tx)
 
 	existing, err := qtx.GetJobByIdempotencyKey(ctx, pld.IdempotencyKey)
 	if err == nil {
@@ -124,7 +124,7 @@ func (c *apiConfig) insertjob(w http.ResponseWriter, r *http.Request) {
 		Status:         sql.NullString{String: "pending", Valid: true},
 		Type:           jobType,
 		RetryCount:     0,
-		MaxRetries:     GetMaxRetriesForJobType(jobType),
+		MaxRetries:     h.GetMaxRetries(jobType),
 		IdempotencyKey: pld.IdempotencyKey,
 		ScheduledAt:    sql.NullTime{Time: pld.ScheduledAt, Valid: !pld.ScheduledAt.IsZero()},
 		CreatedAt:      now,

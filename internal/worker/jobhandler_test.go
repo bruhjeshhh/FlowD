@@ -3,15 +3,22 @@ package worker
 import (
 	"io"
 	"log/slog"
+	"os"
 	"testing"
 )
 
 func TestHandlejobs(t *testing.T) {
 	t.Parallel()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	if res := handlejobs(log, "email", []byte(`{}`)); !res.Success {
-		t.Fatal("email should succeed (stub)")
+
+	if os.Getenv("SMTP_HOST") != "" {
+		if res := handlejobs(log, "email", []byte(`{}`)); !res.Success {
+			t.Fatal("email should succeed with SMTP configured")
+		}
+	} else {
+		t.Log("skipping email test: SMTP_HOST not configured")
 	}
+
 	if res := handlejobs(log, "sms", []byte(`{}`)); !res.Success {
 		t.Fatal("sms should succeed (stub)")
 	}

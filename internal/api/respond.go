@@ -1,10 +1,37 @@
-package main
+package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
+
+	"github.com/bruhjeshhh/flowd/internal/config"
+	db "github.com/bruhjeshhh/flowd/internal/database"
+	"github.com/bruhjeshhh/flowd/internal/metrics"
+	"github.com/bruhjeshhh/flowd/pkg/pqutil"
 )
+
+type Handler struct {
+	db     *db.Queries
+	dbConn *sql.DB
+}
+
+func NewHandler(db *db.Queries, dbConn *sql.DB) *Handler {
+	return &Handler{db: db, dbConn: dbConn}
+}
+
+func (h *Handler) JobsEnqueuedInc(jobType string) {
+	metrics.JobsEnqueued.WithLabelValues(jobType).Inc()
+}
+
+func (h *Handler) GetMaxRetries(jobType string) int32 {
+	return config.GetMaxRetriesForJobType(jobType)
+}
+
+func isUniqueViolation(err error) bool {
+	return pqutil.IsUniqueViolation(err)
+}
 
 func respondWithError(w http.ResponseWriter, code int, msg string) {
 	type errorstc struct {

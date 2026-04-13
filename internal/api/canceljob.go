@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"database/sql"
@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func (c *apiConfig) cancelJob(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CancelJob(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -16,7 +16,7 @@ func (c *apiConfig) cancelJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job, err := c.db.CancelJob(r.Context(), id)
+	job, err := h.db.CancelJob(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			respondWithError(w, http.StatusNotFound, "job not found or cannot be cancelled")

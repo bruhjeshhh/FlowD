@@ -11,18 +11,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bruhjeshhh/flowd/internal/api"
 	db "github.com/bruhjeshhh/flowd/internal/database"
-	"github.com/bruhjeshhh/flowd/metrics"
-	"github.com/bruhjeshhh/flowd/worker"
+	"github.com/bruhjeshhh/flowd/internal/metrics"
+	"github.com/bruhjeshhh/flowd/internal/worker"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
-
-type apiConfig struct {
-	db     *db.Queries
-	dbConn *sql.DB
-}
 
 func instrumentHandler(method, path string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -96,16 +92,16 @@ func main() {
 	}
 
 	dbQueries := db.New(dbz)
-	cfg := apiConfig{db: dbQueries, dbConn: dbz}
+	handler := api.NewHandler(dbQueries, dbz)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /jobs", instrumentHandler("POST", "/jobs", cfg.insertjob))
-	mux.HandleFunc("POST /jobs/batch", instrumentHandler("POST", "/jobs/batch", cfg.batchInsertJobs))
-	mux.HandleFunc("GET /jobs", instrumentHandler("GET", "/jobs", cfg.listJobs))
-	mux.HandleFunc("GET /jobs/{id}", instrumentHandler("GET", "/jobs/{id}", cfg.getJob))
-	mux.HandleFunc("DELETE /jobs/{id}", instrumentHandler("DELETE", "/jobs/{id}", cfg.cancelJob))
-	mux.HandleFunc("POST /jobs/{id}/replay", instrumentHandler("POST", "/jobs/{id}/replay", cfg.replayJob))
-	mux.HandleFunc("GET /health", instrumentHandler("GET", "/health", cfg.health))
+	mux.HandleFunc("POST /jobs", instrumentHandler("POST", "/jobs", handler.InsertJob))
+	mux.HandleFunc("POST /jobs/batch", instrumentHandler("POST", "/jobs/batch", handler.BatchInsertJobs))
+	mux.HandleFunc("GET /jobs", instrumentHandler("GET", "/jobs", handler.ListJobs))
+	mux.HandleFunc("GET /jobs/{id}", instrumentHandler("GET", "/jobs/{id}", handler.GetJob))
+	mux.HandleFunc("DELETE /jobs/{id}", instrumentHandler("DELETE", "/jobs/{id}", handler.CancelJob))
+	mux.HandleFunc("POST /jobs/{id}/replay", instrumentHandler("POST", "/jobs/{id}/replay", handler.ReplayJob))
+	mux.HandleFunc("GET /health", instrumentHandler("GET", "/health", handler.Health))
 	mux.Handle("/metrics", promhttp.Handler())
 
 	srv := &http.Server{

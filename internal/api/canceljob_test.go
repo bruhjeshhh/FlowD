@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"net/http"
@@ -8,8 +8,8 @@ import (
 
 func TestCancelJobInvalidUUID(t *testing.T) {
 	mux := http.NewServeMux()
-	cfg := apiConfig{}
-	mux.HandleFunc("DELETE /jobs/{id}", cfg.cancelJob)
+	h := &Handler{}
+	mux.HandleFunc("DELETE /jobs/{id}", h.CancelJob)
 
 	req := httptest.NewRequest(http.MethodDelete, "/jobs/not-a-valid-uuid", nil)
 	w := httptest.NewRecorder()

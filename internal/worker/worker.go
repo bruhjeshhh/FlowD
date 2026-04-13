@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/bruhjeshhh/flowd/metrics"
+	"github.com/bruhjeshhh/flowd/internal/metrics"
 	"github.com/google/uuid"
 
 	db "github.com/bruhjeshhh/flowd/internal/database"

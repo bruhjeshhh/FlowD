@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"errors"
@@ -12,10 +12,10 @@ import (
 
 func TestGetJob_InvalidUUID(t *testing.T) {
 	t.Parallel()
-	cfg := apiConfig{}
+	h := &Handler{}
 	req := httptest.NewRequest(http.MethodGet, "/jobs/not-a-uuid", nil)
 	w := httptest.NewRecorder()
-	cfg.getJob(w, req)
+	h.GetJob(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status %d, want %d", w.Code, http.StatusBadRequest)
 	}

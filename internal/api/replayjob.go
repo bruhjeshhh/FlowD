@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"database/sql"
@@ -7,11 +7,11 @@ import (
 	"time"
 
 	db "github.com/bruhjeshhh/flowd/internal/database"
-	"github.com/bruhjeshhh/flowd/metrics"
+	"github.com/bruhjeshhh/flowd/internal/metrics"
 	"github.com/google/uuid"
 )
 
-func (c *apiConfig) replayJob(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ReplayJob(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -21,7 +21,7 @@ func (c *apiConfig) replayJob(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	dlqJob, err := c.db.GetDeadLetterJobByID(ctx, id)
+	dlqJob, err := h.db.GetDeadLetterJobByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			respondWithError(w, http.StatusNotFound, "dead letter job not found")
@@ -31,14 +31,14 @@ func (c *apiConfig) replayJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := c.dbConn.BeginTx(ctx, nil)
+	tx, err := h.dbConn.BeginTx(ctx, nil)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	qtx := c.db.WithTx(tx)
+	qtx := h.db.WithTx(tx)
 
 	now := time.Now().UTC()
 	idempotencyKey := dlqJob.IdempotencyKey.String + "-replay-" + uuid.New().String()

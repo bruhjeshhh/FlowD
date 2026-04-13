@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"database/sql"
@@ -13,7 +13,7 @@ const (
 	dlqListMaxLimit     = 200
 )
 
-func (c *apiConfig) listJobs(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	if status == "" {
 		respondWithError(w, http.StatusBadRequest, "query parameter status is required (use status=failed for dead-letter queue)")
@@ -47,7 +47,7 @@ func (c *apiConfig) listJobs(w http.ResponseWriter, r *http.Request) {
 		offset = n
 	}
 
-	jobs, err := c.db.ListJobsByStatus(r.Context(), db.ListJobsByStatusParams{
+	jobs, err := h.db.ListJobsByStatus(r.Context(), db.ListJobsByStatusParams{
 		Status: sql.NullString{String: status, Valid: true},
 		Limit:  int32(limit),
 		Offset: int32(offset),

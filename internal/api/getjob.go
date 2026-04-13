@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"database/sql"
@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func (c *apiConfig) getJob(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -16,7 +16,7 @@ func (c *apiConfig) getJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job, err := c.db.GetJobByID(r.Context(), id)
+	job, err := h.db.GetJobByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			respondWithError(w, http.StatusNotFound, "job not found")
@@ -29,9 +29,9 @@ func (c *apiConfig) getJob(w http.ResponseWriter, r *http.Request) {
 	respondWithJson(w, http.StatusOK, jobToOut(job))
 }
 
-func (c *apiConfig) health(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if err := c.dbConn.PingContext(ctx); err != nil {
+	if err := h.dbConn.PingContext(ctx); err != nil {
 		respondWithError(w, http.StatusServiceUnavailable, "database unavailable")
 		return
 	}
