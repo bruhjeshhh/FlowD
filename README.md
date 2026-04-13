@@ -130,4 +130,41 @@ export DB_URL='postgres://postgres:postgres@localhost:5432/flowD_db?sslmode=disa
 go test -tags=integration ./... -count=1
 ```
 
+## Motivation
+
+FlowD was built to provide a lightweight, Postgres-based job queue that leverages database features for reliability without the operational overhead of external systems like Redis or RabbitMQ. It embraces simplicity: if you already run Postgres, you get durable job queuing with strong consistency guarantees.
+
+Key motivations:
+- **Zero external dependencies** — uses Postgres as the single source of truth
+- **Safe concurrency** — `FOR UPDATE SKIP LOCKED` prevents race conditions without advisory locks
+- **Observability** — structured JSON logs and Prometheus metrics out of the box
+- **Operational simplicity** — dead-letter queue, rescuer for stuck jobs, and idempotent enqueue built in
+
+## Contributing
+
+Contributions are welcome. To get started:
+
+1. **Fork** the repository and create a branch from `main`
+2. **Write tests** for any new functionality (`go test ./... -count=1`)
+3. **Run linting** with `go vet ./...`
+4. **Keep commits atomic** — one feature or fix per commit
+5. **Follow existing code style** — this project uses standard Go conventions
+
+For larger changes, please open an issue first to discuss the proposed changes.
+
+### Adding new job types
+
+To add a new job type (e.g., `push_notification`):
+
+1. Add a handler function in `internal/worker/` (e.g., `handlepushnotifications.go`)
+2. Register it in `internal/worker/jobhandler.go`
+3. Add tests in the same package
+
+### Database changes
+
+If you modify SQL queries:
+
+1. Update `migrations/queries/jobs.sql`
+2. Run `sqlc generate` to regenerate `internal/database/jobs.sql.go`
+3. Review the generated code before committing
 
