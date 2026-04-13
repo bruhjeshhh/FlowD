@@ -33,7 +33,7 @@ Workers are stubs (log + success) but the pipeline is real: claim â†’ process â†
 - **PostgreSQL** 16+ (or use Docker Compose)
 - [sqlc](https://sqlc.dev/) if you change queries under `migrations/queries/`
 
-## Quick start (Docker)
+## Quick Start (Docker)
 
 ```bash
 docker compose up --build
