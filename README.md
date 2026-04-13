@@ -1,6 +1,6 @@
 # FlowD
 
-Postgres-backed **job queue** in Go: HTTP enqueue, background workers that claim jobs with `FOR UPDATE SKIP LOCKED`, retries with backoff, and a rescuer for stuck `processing` rows.
+Postgres-backed **job queue** in Go: HTTP enqueue, background workers that claim jobs with `FOR UPDATE SKIP LOCKED`, retries with backoff, and a rescuer for stuck `processing` rows. FlowD is a lightweight, Postgres-backed job queue designed for reliability without external dependencies like Kafka or Redis. It demonstrates safe concurrent job processing, retries with backoff, and observability using production-grade patterns.
 
 ## Features
 
