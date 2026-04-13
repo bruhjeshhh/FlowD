@@ -15,6 +15,117 @@ Workers are stubs (log + success) but the pipeline is real: claim → process �
 
 **Structured logs** — the process uses `log/slog` with JSON to stdout. Workers and the rescuer attach `worker_id`, `job_id`, and `job_type` where applicable so you can trace a job through claim → success or retry.
 
+## Usage
+
+### Enqueue a job
+
+```bash
+curl -X POST http://localhost:8080/jobs \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "payload": {
+      "type": "email",
+      "data": {
+        "to": "user@example.com",
+        "subject": "Hello",
+        "body": "Your message here"
+      }
+    }
+  }'
+```
+
+Response (201 Created):
+
+```json
+{
+  "job": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "type": "email",
+    "retry_count": 0,
+    "max_retries": 3,
+    "status": "pending"
+  },
+  "idempotent_replay": false
+}
+```
+
+### Enqueue with idempotency key
+
+Use `idempotency_key` to prevent duplicate jobs:
+
+```bash
+curl -X POST http://localhost:8080/jobs \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "idempotency_key": "welcome-email-user-123",
+    "payload": {
+      "type": "email",
+      "data": { "to": "user@example.com", "subject": "Welcome!", "body": "..." }
+    }
+  }'
+```
+
+Repeating the same request returns 200 with `idempotent_replay: true` instead of creating a duplicate.
+
+### Schedule a delayed job
+
+```bash
+curl -X POST http://localhost:8080/jobs \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "scheduled_at": "2026-04-13T15:00:00Z",
+    "payload": {
+      "type": "email",
+      "data": { "to": "user@example.com", "subject": "Reminder", "body": "..." }
+    }
+  }'
+```
+
+### Batch enqueue
+
+Submit up to 100 jobs at once:
+
+```bash
+curl -X POST http://localhost:8080/jobs/batch \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jobs": [
+      {
+        "idempotency_key": "batch-1",
+        "payload": { "type": "email", "data": { "to": "a@b.com", "subject": "Hi", "body": "A" } }
+      },
+      {
+        "idempotency_key": "batch-2",
+        "payload": { "type": "email", "data": { "to": "c@d.com", "subject": "Hi", "body": "B" } }
+      }
+    ]
+  }'
+```
+
+### Get job status
+
+```bash
+curl http://localhost:8080/jobs/550e8400-e29b-41d4-a716-446655440000
+```
+
+### List dead-letter queue (failed jobs)
+
+```bash
+curl 'http://localhost:8080/jobs?status=failed&limit=50&offset=0'
+```
+
+### Replay a failed job
+
+```bash
+curl -X POST http://localhost:8080/jobs/550e8400-e29b-41d4-a716-446655440000/replay
+```
+
+### Cancel a job
+
+```bash
+curl -X DELETE http://localhost:8080/jobs/550e8400-e29b-41d4-a716-446655440000
+```
+
 **Prometheus metrics** at `GET /metrics`:
 
 | Metric | Type | Labels | Description |
