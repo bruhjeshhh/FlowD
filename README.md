@@ -200,6 +200,15 @@ Optional: `WORKER_COUNT` (default `4`).
 |----------|----------|-------------|
 | `DB_URL` | yes | PostgreSQL URL (e.g. `postgres://user:pass@host:5432/dbname?sslmode=disable`) |
 | `WORKER_COUNT` | no | Number of worker goroutines (default `4`) |
+| `SHUTDOWN_TIMEOUT_SECONDS` | no | Graceful shutdown timeout in seconds (default `15`) |
+| `JOB_TYPE_MAX_RETRIES` | no | Per-job-type retry config (format: `email:5,sms:3`) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | no | SMTP configuration for email jobs |
+
+## Middleware
+
+**Request ID**: Every request gets an `X-Request-ID` header. Pass your own via `X-Request-ID` header, or one is auto-generated.
+
+**CORS**: Enabled for all origins with `GET`, `POST`, `DELETE`, and `OPTIONS` methods.
 
 ## Architecture
 

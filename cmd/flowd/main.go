@@ -62,6 +62,15 @@ func updateQueueMetrics(ctx context.Context, q *db.Queries) {
 	}
 }
 
+func getShutdownTimeout() time.Duration {
+	if s := os.Getenv("SHUTDOWN_TIMEOUT_SECONDS"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return time.Duration(n) * time.Second
+		}
+	}
+	return 15 * time.Second
+}
+
 func main() {
 	_ = godotenv.Load()
 
@@ -104,9 +113,11 @@ func main() {
 	mux.HandleFunc("GET /health", instrumentHandler("GET", "/health", handler.Health))
 	mux.Handle("/metrics", promhttp.Handler())
 
+	handlerWithMiddleware := api.RequestIDMiddleware(api.CORSMiddleware(mux))
+
 	srv := &http.Server{
 		Addr:              ":8080",
-		Handler:           mux,
+		Handler:           handlerWithMiddleware,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -144,7 +155,8 @@ func main() {
 	<-sig
 	logger.Info("shutting down")
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	shutdownTimeout := getShutdownTimeout()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
 	workerStop()
