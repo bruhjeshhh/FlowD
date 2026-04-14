@@ -203,8 +203,12 @@ Optional: `WORKER_COUNT` (default `4`).
 | `SHUTDOWN_TIMEOUT_SECONDS` | no | Graceful shutdown timeout in seconds (default `15`) |
 | `JOB_TYPE_MAX_RETRIES` | no | Per-job-type retry config (format: `email:5,sms:3`) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | no | SMTP configuration for email jobs |
+| `RATE_LIMIT_PER_WINDOW` | no | Max requests per IP per window (default `100`) |
+| `RATE_LIMIT_WINDOW_SECONDS` | no | Rate limit window in seconds (default `60`) |
 
 ## Middleware
+
+**Rate Limiting**: Per-IP rate limiting (configurable via env). Returns `429 Too Many Requests` when exceeded.
 
 **Request ID**: Every request gets an `X-Request-ID` header. Pass your own via `X-Request-ID` header, or one is auto-generated.
 

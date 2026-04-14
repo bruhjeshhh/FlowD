@@ -113,7 +113,12 @@ func main() {
 	mux.HandleFunc("GET /health", instrumentHandler("GET", "/health", handler.Health))
 	mux.Handle("/metrics", promhttp.Handler())
 
-	handlerWithMiddleware := api.RequestIDMiddleware(api.CORSMiddleware(mux))
+	rateLimit, rateWindow := api.GetRateLimitConfig()
+	handlerWithMiddleware := api.RateLimitMiddleware(
+		api.RequestIDMiddleware(api.CORSMiddleware(mux)),
+		rateLimit,
+		rateWindow,
+	)
 
 	srv := &http.Server{
 		Addr:              ":8080",
