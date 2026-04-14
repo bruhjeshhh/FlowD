@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/bruhjeshhh/flowd/internal/api"
 	"github.com/bruhjeshhh/flowd/internal/metrics"
 	"github.com/google/uuid"
 
@@ -39,6 +40,15 @@ func (c *APIConfig) WorkerFunc(ctx context.Context) {
 			log.Info("worker stopping")
 			return
 		default:
+		}
+
+		if api.AreWorkersPaused() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(1 * time.Second):
+				continue
+			}
 		}
 
 		response, err := c.DB.GetJobByScheduledAt(ctx)

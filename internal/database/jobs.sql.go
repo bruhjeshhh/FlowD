@@ -40,6 +40,27 @@ func (q *Queries) CancelJob(ctx context.Context, id uuid.UUID) (Job, error) {
 	return i, err
 }
 
+const cleanupOldDeadLetterJobs = `-- name: CleanupOldDeadLetterJobs :exec
+DELETE FROM dead_letter_jobs
+WHERE created_at < NOW() - INTERVAL '1 hour' * $1
+`
+
+func (q *Queries) CleanupOldDeadLetterJobs(ctx context.Context, dollar_1 interface{}) error {
+	_, err := q.db.ExecContext(ctx, cleanupOldDeadLetterJobs, dollar_1)
+	return err
+}
+
+const cleanupOldJobs = `-- name: CleanupOldJobs :exec
+DELETE FROM jobs
+WHERE (status = 'success' OR status = 'cancelled')
+  AND updated_at < NOW() - INTERVAL '1 hour' * $1
+`
+
+func (q *Queries) CleanupOldJobs(ctx context.Context, dollar_1 interface{}) error {
+	_, err := q.db.ExecContext(ctx, cleanupOldJobs, dollar_1)
+	return err
+}
+
 const countDeadLetterJobs = `-- name: CountDeadLetterJobs :one
 SELECT COUNT(*) as count FROM dead_letter_jobs
 `

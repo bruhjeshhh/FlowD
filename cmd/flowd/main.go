@@ -62,6 +62,33 @@ func updateQueueMetrics(ctx context.Context, q *db.Queries) {
 	}
 }
 
+func getJobTTLHours() int {
+	if s := os.Getenv("JOB_RETENTION_HOURS"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 24
+}
+
+func startJobCleanup(ctx context.Context, q *db.Queries, ttlHours int) {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := q.CleanupOldJobs(ctx, int32(ttlHours)); err != nil {
+				slog.Default().Error("job cleanup failed", "err", err)
+			}
+			if err := q.CleanupOldDeadLetterJobs(ctx, int32(ttlHours*7)); err != nil {
+				slog.Default().Error("DLQ cleanup failed", "err", err)
+			}
+		}
+	}
+}
+
 func getShutdownTimeout() time.Duration {
 	if s := os.Getenv("SHUTDOWN_TIMEOUT_SECONDS"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n > 0 {
@@ -105,7 +132,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/health", http.StatusMovedPermanently)
+		http.Redirect(w, r, "/health/live", http.StatusMovedPermanently)
 	})
 	mux.HandleFunc("POST /jobs", instrumentHandler("POST", "/jobs", handler.InsertJob))
 	mux.HandleFunc("POST /jobs/batch", instrumentHandler("POST", "/jobs/batch", handler.BatchInsertJobs))
@@ -113,7 +140,14 @@ func main() {
 	mux.HandleFunc("GET /jobs/{id}", instrumentHandler("GET", "/jobs/{id}", handler.GetJob))
 	mux.HandleFunc("DELETE /jobs/{id}", instrumentHandler("DELETE", "/jobs/{id}", handler.CancelJob))
 	mux.HandleFunc("POST /jobs/{id}/replay", instrumentHandler("POST", "/jobs/{id}/replay", handler.ReplayJob))
-	mux.HandleFunc("GET /health", instrumentHandler("GET", "/health", handler.Health))
+	mux.HandleFunc("GET /health/live", instrumentHandler("GET", "/health/live", handler.Liveness))
+	mux.HandleFunc("GET /health/ready", instrumentHandler("GET", "/health/ready", handler.Readiness))
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/health/live", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("POST /admin/workers/pause", handler.PauseWorkers)
+	mux.HandleFunc("POST /admin/workers/resume", handler.ResumeWorkers)
+	mux.HandleFunc("GET /admin/workers/status", handler.WorkerStatus)
 	mux.Handle("/metrics", promhttp.Handler())
 
 	rateLimit, rateWindow := api.GetRateLimitConfig()
@@ -149,6 +183,7 @@ func main() {
 	go rescuerCfg.RescuerFunc(workerCtx)
 
 	go updateQueueMetrics(workerCtx, dbQueries)
+	go startJobCleanup(workerCtx, dbQueries, getJobTTLHours())
 
 	go func() {
 		logger.Info("http listening", "addr", srv.Addr, "workers", workerCount)

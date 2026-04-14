@@ -29,11 +29,27 @@ func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 	respondWithJson(w, http.StatusOK, jobToOut(job))
 }
 
-func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Liveness(w http.ResponseWriter, r *http.Request) {
+	respondWithJson(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *Handler) Readiness(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
 	if err := h.dbConn.PingContext(ctx); err != nil {
-		respondWithError(w, http.StatusServiceUnavailable, "database unavailable")
+		respondWithJson(w, http.StatusServiceUnavailable, map[string]any{
+			"status": "not ready",
+			"checks": []map[string]string{
+				{"name": "database", "status": "failing", "error": "connection failed"},
+			},
+		})
 		return
 	}
-	respondWithJson(w, http.StatusOK, map[string]string{"status": "ok"})
+
+	respondWithJson(w, http.StatusOK, map[string]any{
+		"status": "ready",
+		"checks": []map[string]string{
+			{"name": "database", "status": "ok"},
+		},
+	})
 }

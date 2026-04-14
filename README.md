@@ -126,6 +126,29 @@ curl -X POST http://localhost:8080/jobs/550e8400-e29b-41d4-a716-446655440000/rep
 curl -X DELETE http://localhost:8080/jobs/550e8400-e29b-41d4-a716-446655440000
 ```
 
+### Health checks
+
+```bash
+# Liveness probe (is the process alive?)
+curl http://localhost:8080/health/live
+
+# Readiness probe (is the service ready to accept traffic?)
+curl http://localhost:8080/health/ready
+```
+
+### Worker control (admin)
+
+```bash
+# Pause workers (stop processing new jobs)
+curl -X POST http://localhost:8080/admin/workers/pause
+
+# Resume workers
+curl -X POST http://localhost:8080/admin/workers/resume
+
+# Check worker status
+curl http://localhost:8080/admin/workers/status
+```
+
 **Prometheus metrics** at `GET /metrics`:
 
 | Metric | Type | Labels | Description |
@@ -201,6 +224,7 @@ Optional: `WORKER_COUNT` (default `4`).
 | `DB_URL` | yes | PostgreSQL URL (e.g. `postgres://user:pass@host:5432/dbname?sslmode=disable`) |
 | `WORKER_COUNT` | no | Number of worker goroutines (default `4`) |
 | `SHUTDOWN_TIMEOUT_SECONDS` | no | Graceful shutdown timeout in seconds (default `15`) |
+| `JOB_RETENTION_HOURS` | no | Hours to keep completed jobs before cleanup (default `24`, DLQs kept 7x longer) |
 | `JOB_TYPE_MAX_RETRIES` | no | Per-job-type retry config (format: `email:5,sms:3`) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | no | SMTP configuration for email jobs |
 | `RATE_LIMIT_PER_WINDOW` | no | Max requests per IP per window (default `100`) |
@@ -213,6 +237,10 @@ Optional: `WORKER_COUNT` (default `4`).
 **Request ID**: Every request gets an `X-Request-ID` header. Pass your own via `X-Request-ID` header, or one is auto-generated.
 
 **CORS**: Enabled for all origins with `GET`, `POST`, `DELETE`, and `OPTIONS` methods.
+
+## API Documentation
+
+OpenAPI specification available at `docs/openapi.yaml`.
 
 ## Architecture
 

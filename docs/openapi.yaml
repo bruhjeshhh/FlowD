@@ -1,0 +1,355 @@
+openapi: 3.0.3
+info:
+  title: FlowD Job Queue API
+  description: Postgres-backed job queue with HTTP enqueue, background workers, retries, and dead-letter queue.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /jobs:
+    post:
+      summary: Enqueue a job
+      tags: [Jobs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJobRequest'
+      responses:
+        '201':
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateJobResponse'
+        '200':
+          description: Idempotent replay (job already exists)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateJobResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      summary: List dead-letter queue (failed jobs)
+      tags: [Jobs]
+      parameters:
+        - name: status
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [failed]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of failed jobs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobListResponse'
+
+  /jobs/batch:
+    post:
+      summary: Batch enqueue jobs (up to 100)
+      tags: [Jobs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchJobRequest'
+      responses:
+        '201':
+          description: Batch created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchJobResponse'
+
+  /jobs/{id}:
+    get:
+      summary: Get job by ID
+      tags: [Jobs]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Cancel a job
+      tags: [Jobs]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Job cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelJobResponse'
+        '404':
+          description: Job not found or cannot be cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /jobs/{id}/replay:
+    post:
+      summary: Replay a dead-letter job
+      tags: [Jobs]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Job replayed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplayJobResponse'
+        '404':
+          description: Dead-letter job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /health/live:
+    get:
+      summary: Liveness probe
+      tags: [Health]
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /health/ready:
+    get:
+      summary: Readiness probe
+      tags: [Health]
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: Service not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      tags: [Observability]
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  schemas:
+    CreateJobRequest:
+      type: object
+      properties:
+        idempotency_key:
+          type: string
+          description: Unique key to prevent duplicate jobs
+        scheduled_at:
+          type: string
+          format: date-time
+          description: Optional future time to run the job
+        payload:
+          $ref: '#/components/schemas/JobPayload'
+
+    BatchJobRequest:
+      type: object
+      required: [jobs]
+      properties:
+        jobs:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/CreateJobRequest'
+
+    JobPayload:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [email, sms, push_notification]
+        data:
+          type: object
+
+    Job:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        payload:
+          type: object
+        status:
+          type: string
+          enum: [pending, processing, success, failed, cancelled]
+        type:
+          type: string
+        retry_count:
+          type: integer
+        max_retries:
+          type: integer
+        idempotency_key:
+          type: string
+        scheduled_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        next_run_at:
+          type: string
+          format: date-time
+
+    CreateJobResponse:
+      type: object
+      properties:
+        job:
+          $ref: '#/components/schemas/Job'
+        idempotent_replay:
+          type: boolean
+
+    BatchJobResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchJobResult'
+        total:
+          type: integer
+
+    BatchJobResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        job:
+          $ref: '#/components/schemas/Job'
+        error:
+          type: string
+        idempotent_replay:
+          type: boolean
+
+    JobListResponse:
+      type: object
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Job'
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    CancelJobResponse:
+      type: object
+      properties:
+        job:
+          $ref: '#/components/schemas/Job'
+        status:
+          type: string
+          example: cancelled
+
+    ReplayJobResponse:
+      type: object
+      properties:
+        job:
+          $ref: '#/components/schemas/Job'
+        status:
+          type: string
+          example: replayed
+
+    ReadinessResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ready, not ready]
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              status:
+                type: string
+              error:
+                type: string
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string

@@ -112,3 +112,12 @@ SELECT COUNT(*) as count FROM dead_letter_jobs;
 
 -- name: DeleteDeadLetterJob :exec
 DELETE FROM dead_letter_jobs WHERE id = $1;
+
+-- name: CleanupOldJobs :exec
+DELETE FROM jobs
+WHERE (status = 'success' OR status = 'cancelled')
+  AND updated_at < NOW() - INTERVAL '1 hour' * $1;
+
+-- name: CleanupOldDeadLetterJobs :exec
+DELETE FROM dead_letter_jobs
+WHERE created_at < NOW() - INTERVAL '1 hour' * $1;
