@@ -131,8 +131,12 @@ func main() {
 	handler := api.NewHandler(dbQueries, dbz)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/health/live", http.StatusMovedPermanently)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			http.Redirect(w, r, "/health/live", http.StatusMovedPermanently)
+			return
+		}
+		http.NotFound(w, r)
 	})
 	mux.HandleFunc("POST /jobs", instrumentHandler("POST", "/jobs", handler.InsertJob))
 	mux.HandleFunc("POST /jobs/batch", instrumentHandler("POST", "/jobs/batch", handler.BatchInsertJobs))
