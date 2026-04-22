@@ -3,7 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/bruhjeshhh/flowd/internal/config"
@@ -43,7 +43,7 @@ func respondWithError(w http.ResponseWriter, code int, msg string) {
 
 	resp, eror := json.Marshal(errormsg)
 	if eror != nil {
-		log.Printf("cant unmarshal the errormsg check respondwitherror func")
+		slog.Error("cannot unmarshal error message", "error", eror)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -56,7 +56,7 @@ func respondWithJson(w http.ResponseWriter, n int, payload any) {
 
 	resp, eror := json.Marshal(payload)
 	if eror != nil {
-		log.Printf("cant marshal the payload check respondwithJson func")
+		slog.Error("cannot marshal payload", "error", eror)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

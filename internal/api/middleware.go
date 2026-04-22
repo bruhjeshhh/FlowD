@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -37,7 +38,7 @@ func RequestLoggingMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(w, r)
 		duration := time.Since(start)
-		log.Info("request completed",
+		slog.Info("request completed",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"duration_ms", duration.Milliseconds(),
