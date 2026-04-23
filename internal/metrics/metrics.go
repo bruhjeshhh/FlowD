@@ -54,7 +54,7 @@ var (
 		[]string{"method", "path", "status"},
 	)
 
-	HTTPRequestDuration = promauto.NewHistogramVec(
+HTTPRequestDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "flowd_http_request_duration_seconds",
 			Help:    "HTTP request duration in seconds",
@@ -62,4 +62,21 @@ var (
 		},
 		[]string{"method", "path"},
 	)
+
+	JobRetries = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "flowd_job_retries_total",
+			Help: "Total number of job retries",
+		},
+		[]string{"type"},
+	)
+
+	DeadLetterJobs = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "flowd_dead_letter_jobs_total",
+			Help: "Total number of jobs moved to dead letter queue",
+		},
+		[]string{"type"},
+	)
+)
 )
