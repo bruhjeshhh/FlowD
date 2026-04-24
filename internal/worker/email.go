@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/smtp"
 	"os"
-	
+	"strings"
 )
 
 type EmailPayload struct {
