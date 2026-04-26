@@ -57,6 +57,19 @@ func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	counts, err := h.db.CountJobsByStatus(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+
+	var total int64
+	for _, c := range counts {
+		if c.Status.Valid && c.Status.String == status {
+			total = c.Count
+		}
+	}
+
 	out := make([]jobOut, 0, len(jobs))
 	for _, j := range jobs {
 		out = append(out, jobToOut(j))
@@ -66,5 +79,6 @@ func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
 		"jobs":   out,
 		"limit":  limit,
 		"offset": offset,
+		"total":  total,
 	})
 }
