@@ -167,8 +167,19 @@ func (h *Handler) BatchInsertJobs(w http.ResponseWriter, r *http.Request) {
 		results[res.index] = res.result
 	}
 
+	var succeeded, failed int
+	for _, r := range results {
+		if r.Success {
+			succeeded++
+		} else {
+			failed++
+		}
+	}
+
 	respondWithJson(w, http.StatusCreated, map[string]interface{}{
-		"results": results,
-		"total":   len(req.Jobs),
+		"results":   results,
+		"total":    len(req.Jobs),
+		"succeeded": succeeded,
+		"failed":   failed,
 	})
 }
