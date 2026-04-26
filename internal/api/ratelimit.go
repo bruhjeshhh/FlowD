@@ -31,7 +31,7 @@ func (rl *rateLimiter) allow(ip string) bool {
 	windowStart := now.Add(-rl.window)
 
 	requests := rl.requests[ip]
-	valid := requests[:0]
+	var valid []time.Time
 	for _, t := range requests {
 		if t.After(windowStart) {
 			valid = append(valid, t)
