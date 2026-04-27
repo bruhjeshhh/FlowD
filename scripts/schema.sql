@@ -9,8 +9,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     scheduled_at timestamp,
     created_at timestamp NOT NULL DEFAULT now(),
     updated_at timestamp NOT NULL DEFAULT now(),
-    next_run_at timestamp DEFAULT now()
+    next_run_at timestamp DEFAULT now(),
+    priority int NOT NULL DEFAULT 0
 );
+
+CREATE INDEX IF NOT EXISTS idx_jobs_priority ON jobs(priority DESC, next_run_at ASC NULLS LAST, created_at ASC) WHERE status = 'pending';
 
 CREATE TABLE IF NOT EXISTS webhooks (
     id uuid PRIMARY KEY,

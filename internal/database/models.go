@@ -39,6 +39,7 @@ type Job struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	NextRunAt      sql.NullTime
+	Priority      int32
 }
 
 type Webhook struct {

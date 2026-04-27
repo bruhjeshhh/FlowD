@@ -1,10 +1,10 @@
 -- name: InsertJob :one
 INSERT INTO jobs(
     id, payload, status, type, retry_count, max_retries, idempotency_key,
-    scheduled_at, created_at, updated_at, next_run_at
+    scheduled_at, created_at, updated_at, next_run_at, priority
 )
 VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
 RETURNING *;
 
@@ -32,7 +32,7 @@ WHERE id = (
     WHERE j.status = 'pending'
       AND (j.scheduled_at IS NULL OR j.scheduled_at <= now())
       AND (j.next_run_at IS NULL OR j.next_run_at <= now())
-    ORDER BY j.next_run_at ASC NULLS LAST, j.created_at ASC
+    ORDER BY j.priority DESC NULLS LAST, j.next_run_at ASC NULLS LAST, j.created_at ASC
     FOR UPDATE SKIP LOCKED
     LIMIT 1
 )
