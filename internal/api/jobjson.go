@@ -15,10 +15,11 @@ type jobOut struct {
 	RetryCount     int32           `json:"retry_count"`
 	MaxRetries     int32           `json:"max_retries"`
 	IdempotencyKey string          `json:"idempotency_key"`
-	ScheduledAt    *time.Time      `json:"scheduled_at,omitempty"`
+	ScheduledAt    *time.Time     `json:"scheduled_at,omitempty"`
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`
-	NextRunAt      *time.Time      `json:"next_run_at,omitempty"`
+	NextRunAt      *time.Time     `json:"next_run_at,omitempty"`
+	Priority      int32           `json:"priority"`
 }
 
 type createJobResponse struct {
@@ -36,6 +37,7 @@ func jobToOut(j db.Job) jobOut {
 		IdempotencyKey: j.IdempotencyKey,
 		CreatedAt:      j.CreatedAt,
 		UpdatedAt:      j.UpdatedAt,
+		Priority:      j.Priority,
 	}
 	if j.Status.Valid {
 		s := j.Status.String

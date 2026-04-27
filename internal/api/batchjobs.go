@@ -117,6 +117,7 @@ func (h *Handler) BatchInsertJobs(w http.ResponseWriter, r *http.Request) {
 				CreatedAt:      now,
 				UpdatedAt:      now,
 				NextRunAt:      sql.NullTime{Time: nextRunAt(now, p.ScheduledAt), Valid: true},
+				Priority:      int32(p.Priority),
 			}
 
 			job, err := qtx.InsertJob(ctx, params)

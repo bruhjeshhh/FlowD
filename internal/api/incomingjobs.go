@@ -16,6 +16,7 @@ type incoming struct {
 	Payload        json.RawMessage `json:"payload"`
 	ScheduledAt    time.Time       `json:"scheduled_at"`
 	IdempotencyKey string          `json:"idempotency_key"`
+	Priority      int            `json:"priority"`
 }
 
 type payloadData struct {
@@ -130,6 +131,7 @@ func (h *Handler) InsertJob(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:      now,
 		UpdatedAt:      now,
 		NextRunAt:      sql.NullTime{Time: nextRunAt(now, pld.ScheduledAt), Valid: true},
+		Priority:      int32(pld.Priority),
 	}
 
 	job, err := qtx.InsertJob(ctx, params)
