@@ -16,9 +16,10 @@ import (
 )
 
 type APIConfig struct {
-	DB       *db.Queries
-	WorkerID int
-	Log      *slog.Logger
+	DB            *db.Queries
+	WorkerID      int
+	Log           *slog.Logger
+	WebhookClient *WebhookClient
 }
 
 func (c *APIConfig) logger() *slog.Logger {
@@ -85,6 +86,12 @@ func (c *APIConfig) WorkerFunc(ctx context.Context) {
 			metrics.JobsProcessed.WithLabelValues(response.Type, "success").Inc()
 			metrics.JobDuration.WithLabelValues(response.Type).Observe(duration)
 			jlog.Info("job succeeded")
+
+			if c.WebhookClient != nil {
+				if err := c.WebhookClient.DeliverJobEvent(ctx, response.Type, "job_success", &response); err != nil {
+					jlog.Error("webhook delivery failed", "err", err)
+				}
+			}
 		} else {
 			if err := c.DB.UpdateJobStatusNotSuccess(ctx, response.ID); err != nil {
 				jlog.Error("mark failure/retry failed", "err", err)
@@ -115,6 +122,12 @@ func (c *APIConfig) WorkerFunc(ctx context.Context) {
 					jlog.Error("failed to move job to DLQ", "err", err)
 				} else {
 					jlog.Info("job moved to DLQ after max retries", "retry_count", newRetryCount)
+				}
+
+				if c.WebhookClient != nil {
+					if err := c.WebhookClient.DeliverJobEvent(ctx, response.Type, "job_failed", &response); err != nil {
+						jlog.Error("webhook delivery failed", "err", err)
+					}
 				}
 			}
 
