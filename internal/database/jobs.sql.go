@@ -18,7 +18,7 @@ const cancelJob = `-- name: CancelJob :one
 UPDATE jobs
 SET status = 'cancelled', updated_at = NOW()
 WHERE id = $1 AND status IN ('pending', 'processing')
-RETURNING id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at
+RETURNING id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at, priority
 `
 
 func (q *Queries) CancelJob(ctx context.Context, id uuid.UUID) (Job, error) {
@@ -36,6 +36,7 @@ func (q *Queries) CancelJob(ctx context.Context, id uuid.UUID) (Job, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.NextRunAt,
+		&i.Priority,
 	)
 	return i, err
 }
@@ -198,7 +199,7 @@ func (q *Queries) GetDeadLetterJobByID(ctx context.Context, id uuid.UUID) (DeadL
 }
 
 const getJobByID = `-- name: GetJobByID :one
-SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at FROM jobs
+SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at, priority FROM jobs
 WHERE id = $1
 LIMIT 1
 `
@@ -223,7 +224,7 @@ func (q *Queries) GetJobByID(ctx context.Context, id uuid.UUID) (Job, error) {
 }
 
 const getJobByIdempotencyKey = `-- name: GetJobByIdempotencyKey :one
-SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at FROM jobs
+SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at, priority FROM jobs
 WHERE idempotency_key = $1
 LIMIT 1
 `
@@ -312,12 +313,12 @@ func (q *Queries) IncrementRetryCount(ctx context.Context, id uuid.UUID) (int32,
 const insertJob = `-- name: InsertJob :one
 INSERT INTO jobs(
     id, payload, status, type, retry_count, max_retries, idempotency_key,
-    scheduled_at, created_at, updated_at, next_run_at
+    scheduled_at, created_at, updated_at, next_run_at, priority
 )
 VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
-RETURNING id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at
+RETURNING id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at, priority
 `
 
 type InsertJobParams struct {
@@ -332,6 +333,7 @@ type InsertJobParams struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	NextRunAt      sql.NullTime
+	Priority      int32
 }
 
 func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, error) {
@@ -347,6 +349,7 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 		arg.CreatedAt,
 		arg.UpdatedAt,
 		arg.NextRunAt,
+		arg.Priority,
 	)
 	var i Job
 	err := row.Scan(
@@ -361,6 +364,7 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.NextRunAt,
+		&i.Priority,
 	)
 	return i, err
 }
@@ -413,7 +417,7 @@ func (q *Queries) ListDeadLetterJobs(ctx context.Context, arg ListDeadLetterJobs
 }
 
 const listJobsByStatus = `-- name: ListJobsByStatus :many
-SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at FROM jobs
+SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at, priority FROM jobs
 WHERE status = $1
 ORDER BY updated_at DESC
 LIMIT $2 OFFSET $3
@@ -446,6 +450,7 @@ func (q *Queries) ListJobsByStatus(ctx context.Context, arg ListJobsByStatusPara
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.NextRunAt,
+			&i.Priority,
 		); err != nil {
 			return nil, err
 		}
