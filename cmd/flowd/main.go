@@ -152,6 +152,9 @@ func main() {
 	mux.HandleFunc("POST /admin/workers/pause", handler.PauseWorkers)
 	mux.HandleFunc("POST /admin/workers/resume", handler.ResumeWorkers)
 	mux.HandleFunc("GET /admin/workers/status", handler.WorkerStatus)
+	mux.HandleFunc("POST /webhooks", handler.CreateWebhook)
+	mux.HandleFunc("GET /webhooks", handler.ListWebhooks)
+	mux.HandleFunc("DELETE /webhooks/{id}", handler.DeleteWebhook)
 	mux.Handle("/metrics", promhttp.Handler())
 
 	rateLimit, rateWindow := api.GetRateLimitConfig()
@@ -179,11 +182,13 @@ func main() {
 	workerCtx, workerStop := context.WithCancel(context.Background())
 	defer workerStop()
 
+	webhookClient := worker.NewWebhookClient(dbQueries, logger)
+
 	for i := 1; i <= workerCount; i++ {
-		workerCfg := &worker.APIConfig{DB: dbQueries, WorkerID: i, Log: logger}
+		workerCfg := &worker.APIConfig{DB: dbQueries, WorkerID: i, Log: logger, WebhookClient: webhookClient}
 		go workerCfg.WorkerFunc(workerCtx)
 	}
-	rescuerCfg := &worker.APIConfig{DB: dbQueries, WorkerID: 0, Log: logger}
+	rescuerCfg := &worker.APIConfig{DB: dbQueries, WorkerID: 0, Log: logger, WebhookClient: webhookClient}
 	go rescuerCfg.RescuerFunc(workerCtx)
 
 	go updateQueueMetrics(workerCtx, dbQueries)
