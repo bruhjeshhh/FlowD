@@ -40,3 +40,12 @@ type Job struct {
 	UpdatedAt      time.Time
 	NextRunAt      sql.NullTime
 }
+
+type Webhook struct {
+	ID        uuid.UUID
+	URL       string
+	JobType   string
+	Event     string
+	Secret    sql.NullString
+	CreatedAt time.Time
+}

@@ -506,3 +506,162 @@ func (q *Queries) UpdateJobStatusSuccess(ctx context.Context, id uuid.UUID) erro
 	_, err := q.db.ExecContext(ctx, updateJobStatusSuccess, id)
 	return err
 }
+
+const countWebhooks = `-- name: CountWebhooks :one
+SELECT COUNT(*) as count FROM webhooks
+`
+
+func (q *Queries) CountWebhooks(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countWebhooks)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const deleteWebhook = `-- name: DeleteWebhook :exec
+DELETE FROM webhooks WHERE id = $1
+`
+
+func (q *Queries) DeleteWebhook(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteWebhook, id)
+	return err
+}
+
+const getWebhookByID = `-- name: GetWebhookByID :one
+SELECT id, url, job_type, event, secret, created_at FROM webhooks
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetWebhookByID(ctx context.Context, id uuid.UUID) (Webhook, error) {
+	row := q.db.QueryRowContext(ctx, getWebhookByID, id)
+	var i Webhook
+	err := row.Scan(
+		&i.ID,
+		&i.URL,
+		&i.JobType,
+		&i.Event,
+		&i.Secret,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getWebhooksByJobTypeAndEvent = `-- name: GetWebhooksByJobTypeAndEvent :many
+SELECT id, url, job_type, event, secret, created_at FROM webhooks
+WHERE job_type = $1 AND event = $2
+`
+
+type GetWebhooksByJobTypeAndEventParams struct {
+	JobType string
+	Event  string
+}
+
+func (q *Queries) GetWebhooksByJobTypeAndEvent(ctx context.Context, arg GetWebhooksByJobTypeAndEventParams) ([]Webhook, error) {
+	rows, err := q.db.QueryContext(ctx, getWebhooksByJobTypeAndEvent, arg.JobType, arg.Event)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Webhook
+	for rows.Next() {
+		var i Webhook
+		if err := rows.Scan(
+			&i.ID,
+			&i.URL,
+			&i.JobType,
+			&i.Event,
+			&i.Secret,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertWebhook = `-- name: InsertWebhook :one
+INSERT INTO webhooks(
+    id, url, job_type, event, secret, created_at
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, url, job_type, event, secret, created_at
+`
+
+type InsertWebhookParams struct {
+	ID        uuid.UUID
+	URL       string
+	JobType   string
+	Event     string
+	Secret    sql.NullString
+	CreatedAt time.Time
+}
+
+func (q *Queries) InsertWebhook(ctx context.Context, arg InsertWebhookParams) (Webhook, error) {
+	row := q.db.QueryRowContext(ctx, insertWebhook,
+		arg.ID,
+		arg.URL,
+		arg.JobType,
+		arg.Event,
+		arg.Secret,
+		arg.CreatedAt,
+	)
+	var i Webhook
+	err := row.Scan(
+		&i.ID,
+		&i.URL,
+		&i.JobType,
+		&i.Event,
+		&i.Secret,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listWebhooks = `-- name: ListWebhooks :many
+SELECT id, url, job_type, event, secret, created_at FROM webhooks
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListWebhooksParams struct {
+	Limit  int32
+	Offset int32
+}
+
+func (q *Queries) ListWebhooks(ctx context.Context, arg ListWebhooksParams) ([]Webhook, error) {
+	rows, err := q.db.QueryContext(ctx, listWebhooks, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Webhook
+	for rows.Next() {
+		var i Webhook
+		if err := rows.Scan(
+			&i.ID,
+			&i.URL,
+			&i.JobType,
+			&i.Event,
+			&i.Secret,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

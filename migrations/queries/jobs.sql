@@ -121,3 +121,32 @@ WHERE (status = 'success' OR status = 'cancelled')
 -- name: CleanupOldDeadLetterJobs :exec
 DELETE FROM dead_letter_jobs
 WHERE created_at < NOW() - INTERVAL '1 hour' * $1;
+
+-- Webhooks
+
+-- name: InsertWebhook :one
+INSERT INTO webhooks(
+    id, url, job_type, event, secret, created_at
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: GetWebhooksByJobTypeAndEvent :many
+SELECT * FROM webhooks
+WHERE job_type = $1 AND event = $2;
+
+-- name: ListWebhooks :many
+SELECT * FROM webhooks
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: GetWebhookByID :one
+SELECT * FROM webhooks
+WHERE id = $1
+LIMIT 1;
+
+-- name: DeleteWebhook :exec
+DELETE FROM webhooks WHERE id = $1;
+
+-- name: CountWebhooks :one
+SELECT COUNT(*) as count FROM webhooks;
