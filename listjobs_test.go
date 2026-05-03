@@ -1,4 +1,4 @@
-package api
+package main
 
 import (
 	"net/http"
@@ -8,7 +8,7 @@ import (
 
 func TestListJobs_QueryValidation(t *testing.T) {
 	t.Parallel()
-	h := &Handler{}
+	cfg := apiConfig{}
 	cases := []struct {
 		name       string
 		rawQuery   string
@@ -41,7 +41,7 @@ func TestListJobs_QueryValidation(t *testing.T) {
 			t.Parallel()
 			req := httptest.NewRequest(http.MethodGet, "/jobs?"+tc.rawQuery, nil)
 			w := httptest.NewRecorder()
-			h.ListJobs(w, req)
+			cfg.listJobs(w, req)
 			if w.Code != tc.wantStatus {
 				t.Fatalf("status %d, body %s", w.Code, w.Body.String())
 			}

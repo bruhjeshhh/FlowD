@@ -1,4 +1,4 @@
-package api
+package main
 
 import (
 	"encoding/json"
@@ -70,7 +70,7 @@ func TestParsePayloadType(t *testing.T) {
 
 func TestInsertjob_PreDatabaseValidation(t *testing.T) {
 	t.Parallel()
-	h := &Handler{}
+	cfg := apiConfig{}
 	cases := []struct {
 		name       string
 		body       string
@@ -99,7 +99,7 @@ func TestInsertjob_PreDatabaseValidation(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/jobs", strings.NewReader(tc.body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
-			h.InsertJob(w, req)
+			cfg.insertjob(w, req)
 			if w.Code != tc.wantStatus {
 				t.Fatalf("status %d, body %s", w.Code, w.Body.String())
 			}

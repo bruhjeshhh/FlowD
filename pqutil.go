@@ -1,4 +1,4 @@
-package pqutil
+package main
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"github.com/lib/pq"
 )
 
-func IsUniqueViolation(err error) bool {
+func isUniqueViolation(err error) bool {
 	var pqErr *pq.Error
 	return errors.As(err, &pqErr) && pqErr.Code == "23505"
 }

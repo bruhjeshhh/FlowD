@@ -1,4 +1,4 @@
-package api
+package main
 
 import (
 	"database/sql"
@@ -13,7 +13,7 @@ const (
 	dlqListMaxLimit     = 200
 )
 
-func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
+func (c *apiConfig) listJobs(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	if status == "" {
 		respondWithError(w, http.StatusBadRequest, "query parameter status is required (use status=failed for dead-letter queue)")
@@ -47,7 +47,7 @@ func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
 		offset = n
 	}
 
-	jobs, err := h.db.ListJobsByStatus(r.Context(), db.ListJobsByStatusParams{
+	jobs, err := c.db.ListJobsByStatus(r.Context(), db.ListJobsByStatusParams{
 		Status: sql.NullString{String: status, Valid: true},
 		Limit:  int32(limit),
 		Offset: int32(offset),
@@ -55,19 +55,6 @@ func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "database error")
 		return
-	}
-
-	counts, err := h.db.CountJobsByStatus(r.Context())
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "database error")
-		return
-	}
-
-	var total int64
-	for _, c := range counts {
-		if c.Status.Valid && c.Status.String == status {
-			total = c.Count
-		}
 	}
 
 	out := make([]jobOut, 0, len(jobs))
@@ -79,6 +66,5 @@ func (h *Handler) ListJobs(w http.ResponseWriter, r *http.Request) {
 		"jobs":   out,
 		"limit":  limit,
 		"offset": offset,
-		"total":  total,
 	})
 }

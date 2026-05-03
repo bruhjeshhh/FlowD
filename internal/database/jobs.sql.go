@@ -14,192 +14,8 @@ import (
 	"github.com/google/uuid"
 )
 
-const cancelJob = `-- name: CancelJob :one
-UPDATE jobs
-SET status = 'cancelled', updated_at = NOW()
-WHERE id = $1 AND status IN ('pending', 'processing')
-RETURNING id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at, priority
-`
-
-func (q *Queries) CancelJob(ctx context.Context, id uuid.UUID) (Job, error) {
-	row := q.db.QueryRowContext(ctx, cancelJob, id)
-	var i Job
-	err := row.Scan(
-		&i.ID,
-		&i.Payload,
-		&i.Status,
-		&i.Type,
-		&i.RetryCount,
-		&i.MaxRetries,
-		&i.IdempotencyKey,
-		&i.ScheduledAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.NextRunAt,
-		&i.Priority,
-	)
-	return i, err
-}
-
-const cleanupOldDeadLetterJobs = `-- name: CleanupOldDeadLetterJobs :exec
-DELETE FROM dead_letter_jobs
-WHERE created_at < NOW() - INTERVAL '1 hour' * $1
-`
-
-func (q *Queries) CleanupOldDeadLetterJobs(ctx context.Context, dollar_1 interface{}) error {
-	_, err := q.db.ExecContext(ctx, cleanupOldDeadLetterJobs, dollar_1)
-	return err
-}
-
-const cleanupOldJobs = `-- name: CleanupOldJobs :exec
-DELETE FROM jobs
-WHERE (status = 'success' OR status = 'cancelled')
-  AND updated_at < NOW() - INTERVAL '1 hour' * $1
-`
-
-func (q *Queries) CleanupOldJobs(ctx context.Context, dollar_1 interface{}) error {
-	_, err := q.db.ExecContext(ctx, cleanupOldJobs, dollar_1)
-	return err
-}
-
-const countDeadLetterJobs = `-- name: CountDeadLetterJobs :one
-SELECT COUNT(*) as count FROM dead_letter_jobs
-`
-
-func (q *Queries) CountDeadLetterJobs(ctx context.Context) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countDeadLetterJobs)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countJobsByStatus = `-- name: CountJobsByStatus :many
-SELECT status, COUNT(*) as count FROM jobs GROUP BY status
-`
-
-type CountJobsByStatusRow struct {
-	Status sql.NullString
-	Count  int64
-}
-
-func (q *Queries) CountJobsByStatus(ctx context.Context) ([]CountJobsByStatusRow, error) {
-	rows, err := q.db.QueryContext(ctx, countJobsByStatus)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CountJobsByStatusRow
-	for rows.Next() {
-		var i CountJobsByStatusRow
-		if err := rows.Scan(&i.Status, &i.Count); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const createDeadLetterJob = `-- name: CreateDeadLetterJob :one
-INSERT INTO dead_letter_jobs(
-    id, job_id, payload, status, type, retry_count, max_retries,
-    idempotency_key, scheduled_at, created_at, failure_reason, original_error
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, job_id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, failure_reason, original_error
-`
-
-type CreateDeadLetterJobParams struct {
-	ID             uuid.UUID
-	JobID          uuid.UUID
-	Payload        json.RawMessage
-	Status         string
-	Type           string
-	RetryCount     int32
-	MaxRetries     int32
-	IdempotencyKey sql.NullString
-	ScheduledAt    sql.NullTime
-	CreatedAt      time.Time
-	FailureReason  sql.NullString
-	OriginalError  sql.NullString
-}
-
-// Create DLQ table
-func (q *Queries) CreateDeadLetterJob(ctx context.Context, arg CreateDeadLetterJobParams) (DeadLetterJob, error) {
-	row := q.db.QueryRowContext(ctx, createDeadLetterJob,
-		arg.ID,
-		arg.JobID,
-		arg.Payload,
-		arg.Status,
-		arg.Type,
-		arg.RetryCount,
-		arg.MaxRetries,
-		arg.IdempotencyKey,
-		arg.ScheduledAt,
-		arg.CreatedAt,
-		arg.FailureReason,
-		arg.OriginalError,
-	)
-	var i DeadLetterJob
-	err := row.Scan(
-		&i.ID,
-		&i.JobID,
-		&i.Payload,
-		&i.Status,
-		&i.Type,
-		&i.RetryCount,
-		&i.MaxRetries,
-		&i.IdempotencyKey,
-		&i.ScheduledAt,
-		&i.CreatedAt,
-		&i.FailureReason,
-		&i.OriginalError,
-	)
-	return i, err
-}
-
-const deleteDeadLetterJob = `-- name: DeleteDeadLetterJob :exec
-DELETE FROM dead_letter_jobs WHERE id = $1
-`
-
-func (q *Queries) DeleteDeadLetterJob(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, deleteDeadLetterJob, id)
-	return err
-}
-
-const getDeadLetterJobByID = `-- name: GetDeadLetterJobByID :one
-SELECT id, job_id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, failure_reason, original_error FROM dead_letter_jobs
-WHERE id = $1
-LIMIT 1
-`
-
-func (q *Queries) GetDeadLetterJobByID(ctx context.Context, id uuid.UUID) (DeadLetterJob, error) {
-	row := q.db.QueryRowContext(ctx, getDeadLetterJobByID, id)
-	var i DeadLetterJob
-	err := row.Scan(
-		&i.ID,
-		&i.JobID,
-		&i.Payload,
-		&i.Status,
-		&i.Type,
-		&i.RetryCount,
-		&i.MaxRetries,
-		&i.IdempotencyKey,
-		&i.ScheduledAt,
-		&i.CreatedAt,
-		&i.FailureReason,
-		&i.OriginalError,
-	)
-	return i, err
-}
-
 const getJobByID = `-- name: GetJobByID :one
-SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at, priority FROM jobs
+SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at FROM jobs
 WHERE id = $1
 LIMIT 1
 `
@@ -224,7 +40,7 @@ func (q *Queries) GetJobByID(ctx context.Context, id uuid.UUID) (Job, error) {
 }
 
 const getJobByIdempotencyKey = `-- name: GetJobByIdempotencyKey :one
-SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at, priority FROM jobs
+SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at FROM jobs
 WHERE idempotency_key = $1
 LIMIT 1
 `
@@ -313,12 +129,12 @@ func (q *Queries) IncrementRetryCount(ctx context.Context, id uuid.UUID) (int32,
 const insertJob = `-- name: InsertJob :one
 INSERT INTO jobs(
     id, payload, status, type, retry_count, max_retries, idempotency_key,
-    scheduled_at, created_at, updated_at, next_run_at, priority
+    scheduled_at, created_at, updated_at, next_run_at
 )
 VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
-RETURNING id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at, priority
+RETURNING id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at
 `
 
 type InsertJobParams struct {
@@ -333,7 +149,6 @@ type InsertJobParams struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	NextRunAt      sql.NullTime
-	Priority      int32
 }
 
 func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, error) {
@@ -349,7 +164,6 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 		arg.CreatedAt,
 		arg.UpdatedAt,
 		arg.NextRunAt,
-		arg.Priority,
 	)
 	var i Job
 	err := row.Scan(
@@ -364,60 +178,12 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.NextRunAt,
-		&i.Priority,
 	)
 	return i, err
 }
 
-const listDeadLetterJobs = `-- name: ListDeadLetterJobs :many
-SELECT id, job_id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, failure_reason, original_error FROM dead_letter_jobs
-ORDER BY created_at DESC
-LIMIT $1 OFFSET $2
-`
-
-type ListDeadLetterJobsParams struct {
-	Limit  int32
-	Offset int32
-}
-
-func (q *Queries) ListDeadLetterJobs(ctx context.Context, arg ListDeadLetterJobsParams) ([]DeadLetterJob, error) {
-	rows, err := q.db.QueryContext(ctx, listDeadLetterJobs, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []DeadLetterJob
-	for rows.Next() {
-		var i DeadLetterJob
-		if err := rows.Scan(
-			&i.ID,
-			&i.JobID,
-			&i.Payload,
-			&i.Status,
-			&i.Type,
-			&i.RetryCount,
-			&i.MaxRetries,
-			&i.IdempotencyKey,
-			&i.ScheduledAt,
-			&i.CreatedAt,
-			&i.FailureReason,
-			&i.OriginalError,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listJobsByStatus = `-- name: ListJobsByStatus :many
-SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at, priority FROM jobs
+SELECT id, payload, status, type, retry_count, max_retries, idempotency_key, scheduled_at, created_at, updated_at, next_run_at FROM jobs
 WHERE status = $1
 ORDER BY updated_at DESC
 LIMIT $2 OFFSET $3
@@ -450,7 +216,6 @@ func (q *Queries) ListJobsByStatus(ctx context.Context, arg ListJobsByStatusPara
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.NextRunAt,
-			&i.Priority,
 		); err != nil {
 			return nil, err
 		}
@@ -510,163 +275,4 @@ WHERE id = $1
 func (q *Queries) UpdateJobStatusSuccess(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.ExecContext(ctx, updateJobStatusSuccess, id)
 	return err
-}
-
-const countWebhooks = `-- name: CountWebhooks :one
-SELECT COUNT(*) as count FROM webhooks
-`
-
-func (q *Queries) CountWebhooks(ctx context.Context) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countWebhooks)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const deleteWebhook = `-- name: DeleteWebhook :exec
-DELETE FROM webhooks WHERE id = $1
-`
-
-func (q *Queries) DeleteWebhook(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.ExecContext(ctx, deleteWebhook, id)
-	return err
-}
-
-const getWebhookByID = `-- name: GetWebhookByID :one
-SELECT id, url, job_type, event, secret, created_at FROM webhooks
-WHERE id = $1
-LIMIT 1
-`
-
-func (q *Queries) GetWebhookByID(ctx context.Context, id uuid.UUID) (Webhook, error) {
-	row := q.db.QueryRowContext(ctx, getWebhookByID, id)
-	var i Webhook
-	err := row.Scan(
-		&i.ID,
-		&i.URL,
-		&i.JobType,
-		&i.Event,
-		&i.Secret,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const getWebhooksByJobTypeAndEvent = `-- name: GetWebhooksByJobTypeAndEvent :many
-SELECT id, url, job_type, event, secret, created_at FROM webhooks
-WHERE job_type = $1 AND event = $2
-`
-
-type GetWebhooksByJobTypeAndEventParams struct {
-	JobType string
-	Event  string
-}
-
-func (q *Queries) GetWebhooksByJobTypeAndEvent(ctx context.Context, arg GetWebhooksByJobTypeAndEventParams) ([]Webhook, error) {
-	rows, err := q.db.QueryContext(ctx, getWebhooksByJobTypeAndEvent, arg.JobType, arg.Event)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Webhook
-	for rows.Next() {
-		var i Webhook
-		if err := rows.Scan(
-			&i.ID,
-			&i.URL,
-			&i.JobType,
-			&i.Event,
-			&i.Secret,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const insertWebhook = `-- name: InsertWebhook :one
-INSERT INTO webhooks(
-    id, url, job_type, event, secret, created_at
-)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, url, job_type, event, secret, created_at
-`
-
-type InsertWebhookParams struct {
-	ID        uuid.UUID
-	URL       string
-	JobType   string
-	Event     string
-	Secret    sql.NullString
-	CreatedAt time.Time
-}
-
-func (q *Queries) InsertWebhook(ctx context.Context, arg InsertWebhookParams) (Webhook, error) {
-	row := q.db.QueryRowContext(ctx, insertWebhook,
-		arg.ID,
-		arg.URL,
-		arg.JobType,
-		arg.Event,
-		arg.Secret,
-		arg.CreatedAt,
-	)
-	var i Webhook
-	err := row.Scan(
-		&i.ID,
-		&i.URL,
-		&i.JobType,
-		&i.Event,
-		&i.Secret,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const listWebhooks = `-- name: ListWebhooks :many
-SELECT id, url, job_type, event, secret, created_at FROM webhooks
-ORDER BY created_at DESC
-LIMIT $1 OFFSET $2
-`
-
-type ListWebhooksParams struct {
-	Limit  int32
-	Offset int32
-}
-
-func (q *Queries) ListWebhooks(ctx context.Context, arg ListWebhooksParams) ([]Webhook, error) {
-	rows, err := q.db.QueryContext(ctx, listWebhooks, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Webhook
-	for rows.Next() {
-		var i Webhook
-		if err := rows.Scan(
-			&i.ID,
-			&i.URL,
-			&i.JobType,
-			&i.Event,
-			&i.Secret,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }

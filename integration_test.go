@@ -1,6 +1,6 @@
 //go:build integration
 
-package api
+package main
 
 import (
 	"bytes"
@@ -31,7 +31,7 @@ func TestIntegrationIdempotentCreate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := NewHandler(db.New(dbz), dbz)
+	cfg := apiConfig{db: db.New(dbz), dbConn: dbz}
 
 	body := map[string]any{
 		"idempotency_key": "integration-test-" + t.Name(),
@@ -45,7 +45,7 @@ func TestIntegrationIdempotentCreate(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/jobs", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	h.InsertJob(w, req)
+	cfg.insertjob(w, req)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("first POST: %d %s", w.Code, w.Body.String())
 	}
@@ -61,7 +61,7 @@ func TestIntegrationIdempotentCreate(t *testing.T) {
 	req2 := httptest.NewRequest(http.MethodPost, "/jobs", bytes.NewReader(b))
 	req2.Header.Set("Content-Type", "application/json")
 	w2 := httptest.NewRecorder()
-	h.InsertJob(w2, req2)
+	cfg.insertjob(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("second POST: %d %s", w2.Code, w2.Body.String())
 	}

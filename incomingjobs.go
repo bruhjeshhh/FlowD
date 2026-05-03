@@ -1,4 +1,4 @@
-package api
+package main
 
 import (
 	"database/sql"
@@ -8,7 +8,6 @@ import (
 	"time"
 
 	db "github.com/bruhjeshhh/flowd/internal/database"
-	"github.com/bruhjeshhh/flowd/internal/metrics"
 	"github.com/google/uuid"
 )
 
@@ -16,7 +15,6 @@ type incoming struct {
 	Payload        json.RawMessage `json:"payload"`
 	ScheduledAt    time.Time       `json:"scheduled_at"`
 	IdempotencyKey string          `json:"idempotency_key"`
-	Priority      int            `json:"priority"`
 }
 
 type payloadData struct {
@@ -68,7 +66,7 @@ func nextRunAt(now time.Time, scheduledAt time.Time) time.Time {
 	return now
 }
 
-func (h *Handler) InsertJob(w http.ResponseWriter, r *http.Request) {
+func (c *apiConfig) insertjob(w http.ResponseWriter, r *http.Request) {
 	decode := json.NewDecoder(r.Body)
 	pld := incoming{}
 	if err := decode.Decode(&pld); err != nil {
@@ -93,14 +91,14 @@ func (h *Handler) InsertJob(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	now := time.Now().UTC()
 
-	tx, err := h.dbConn.BeginTx(ctx, nil)
+	tx, err := c.dbConn.BeginTx(ctx, nil)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	qtx := h.db.WithTx(tx)
+	qtx := c.db.WithTx(tx)
 
 	existing, err := qtx.GetJobByIdempotencyKey(ctx, pld.IdempotencyKey)
 	if err == nil {
@@ -125,13 +123,12 @@ func (h *Handler) InsertJob(w http.ResponseWriter, r *http.Request) {
 		Status:         sql.NullString{String: "pending", Valid: true},
 		Type:           jobType,
 		RetryCount:     0,
-		MaxRetries:     h.GetMaxRetries(jobType),
+		MaxRetries:     3,
 		IdempotencyKey: pld.IdempotencyKey,
 		ScheduledAt:    sql.NullTime{Time: pld.ScheduledAt, Valid: !pld.ScheduledAt.IsZero()},
 		CreatedAt:      now,
 		UpdatedAt:      now,
 		NextRunAt:      sql.NullTime{Time: nextRunAt(now, pld.ScheduledAt), Valid: true},
-		Priority:      int32(pld.Priority),
 	}
 
 	job, err := qtx.InsertJob(ctx, params)
@@ -160,8 +157,6 @@ func (h *Handler) InsertJob(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "database error")
 		return
 	}
-
-	metrics.JobsEnqueued.WithLabelValues(jobType).Inc()
 
 	respondWithJson(w, http.StatusCreated, createJobResponse{
 		Job:              jobToOut(job),
